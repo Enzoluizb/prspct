@@ -30,23 +30,44 @@ export interface MappingConfig {
 
 export const DEFAULT_MAPPING: MappingConfig = {
   sections: {
-    LOCATÁRIO: {
+    // Baseado no prospecto-modelo (contrato de locação de BOX). Nomes de seção
+    // aqui devem bater com o texto do título na linha (sem o ":" final, se tiver).
+    'LOCATÁRIO(A)': {
       Nome: '{NOME_CLIENTE}',
+      Contratante: '{NOME_CLIENTE}',
+      'Profissão/Ramo de Atividade': '{CLIENTE_ATIVIDADE}',
       CPF: '{CPF_CNPJ_CLIENTE}',
       CNPJ: '{CPF_CNPJ_CLIENTE}',
       'CPF/CNPJ': '{CPF_CNPJ_CLIENTE}',
+      RG: '{RG_CLIENTE}',
       Endereço: '{ENDERECO_COMPLETO_CLIENTE}',
+      'Endereço de correspondência': '{ENDERECO_CLIENTE}',
+      Telefone: '{TELEFONE2_CLIENTE}',
+      Telefone1: '{TELEFONE1_CLIENTE}',
+      Telefone2: '{TELEFONE2_CLIENTE}',
       Telefones: '{TELEFONE1_CLIENTE} {TELEFONE2_CLIENTE}',
-      Telefone: '{TELEFONE1_CLIENTE}',
       'E-mail': '{EMAIL_CLIENTE}',
       Email: '{EMAIL_CLIENTE}',
     },
-    LOCADOR: {
-      // dados da propria empresa: ficam fixos (o valor digitado e mantido), so nego rita o rotulo
-      'Razão Social': null,
-      CNPJ: null,
-      'Inscrição Estadual': null,
-      Endereço: null,
+    'II - LOCADORA': {
+      // a "locadora" e a unidade de self storage nossa cliente: os dados dela
+      // tambem sao dinamicos (mudam de unidade pra unidade), por isso viram coringa.
+      'Denominação social': '{UNIDADE_FANTASIA}',
+      'Inscrição no CNPJ/MF': '{CNPJ_UNIDADE}',
+      'Razão Social': '{UNIDADE}',
+      'Sede Social': '{ENDERECO_COMPLETO_UNIDADE}',
+      'Pix para pagamentos': '{CNPJ_UNIDADE}',
+      'Telefone da Empresa': '{TEL2_UNIDADE}',
+      'E-mail': '{EMAIL_UNIDADE}',
+    },
+    'III - LOCAÇÃO': {
+      'Valor da locação': '{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})',
+      Desconto: '{PERC_FIXO_DESCONTO_CONTRATO}',
+      'Início da Locação': '{DT_INICIO_CONTRATO}',
+      'Término da Locação': '{DT_FIM_CONTRATO} {DT_VENCIMENTO_CONTRATO}',
+      // texto padrao (boilerplate) que se repete igual em todo contrato: mantem como digitado
+      'Prazo de Renovação': null,
+      'Número e Metragem do(s) BOXE(s)': 'Box nº {BOXES_CONTRATO}, com {BOXES_M2}.',
     },
   },
   fallback: {},

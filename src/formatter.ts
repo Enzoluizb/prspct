@@ -5,13 +5,17 @@ export interface FormatResult {
   unmappedFields: string[]; // rotulos encontrados que nao tem mapeamento cadastrado
 }
 
-// Uma linha e "titulo de secao" se for só texto (sem ":"), curto, e vier maiúsculo
-// (permite variar de projeto pra projeto sem precisar mexer no codigo: "LOCATARIO",
-// "LOCADOR", "TESTEMUNHAS", etc.)
+// Uma linha e "titulo de secao" se for só texto (sem ":" no meio), curta, e vier
+// maiúscula (permite variar de contrato pra contrato sem mexer no código:
+// "LOCATÁRIO(A)", "II - LOCADORA", "III - LOCAÇÃO", "CLÁUSULA PRIMEIRA" etc).
+// Um ":" sozinho no final (ex: "LOCATÁRIO(A):") não desqualifica — só indica
+// que a seção não tem valor na própria linha.
 function isSectionHeader(line: string): boolean {
-  const trimmed = line.trim();
+  let trimmed = line.trim();
+  if (!trimmed) return false;
+  if (trimmed.endsWith(':')) trimmed = trimmed.slice(0, -1).trim();
   if (!trimmed || trimmed.includes(':')) return false;
-  if (trimmed.length > 40) return false;
+  if (trimmed.length > 50) return false;
   // pelo menos uma letra, e nenhuma letra minuscula (acentos inclusos)
   const hasLetter = /[A-Za-zÀ-ÿ]/.test(trimmed);
   const hasLowercase = /[a-zà-ÿ]/.test(trimmed);
@@ -42,6 +46,26 @@ function findTemplate(map: Record<string, string | null> | undefined, label: str
 // nos prospectos atuais. Ajuste a cor aqui se o padrao mudar.
 const SECTION_HEADER_STYLE = 'background:#ffc000;padding:4px 8px;display:block;';
 
+// Detecta um ou mais campos "Rótulo: valor" dentro da MESMA linha, ex:
+// "CPF:  {CPF_CNPJ_CLIENTE}     RG: {RG_CLIENTE}" -> dois campos.
+// Um novo rótulo só é reconhecido no início da linha OU depois de 2+ espaços
+// (é assim que o Word normalmente alinha campos lado a lado numa tabela/coluna).
+const FIELD_LABEL_REGEX = /(?:^|(?<= {2,}))([A-ZÀ-Ÿ][A-Za-zÀ-ÿ0-9°º/.() -]{0,40}?):[ \t]?/g;
+
+interface FieldMatch {
+  label: string;
+  labelStart: number;
+  valueStart: number;
+}
+
+function findFieldsInLine(line: string): FieldMatch[] {
+  const matches: FieldMatch[] = [];
+  for (const m of line.matchAll(FIELD_LABEL_REGEX)) {
+    matches.push({ label: m[1], labelStart: m.index ?? 0, valueStart: (m.index ?? 0) + m[0].length });
+  }
+  return matches;
+}
+
 export function formatProspecto(rawText: string, config: MappingConfig): FormatResult {
   const lines = rawText.replace(/\r\n/g, '\n').split('\n');
   const htmlParts: string[] = [];
@@ -58,38 +82,43 @@ export function formatProspecto(rawText: string, config: MappingConfig): FormatR
     }
 
     if (isSectionHeader(line)) {
-      currentSection = line;
-      htmlParts.push(`<p style="${SECTION_HEADER_STYLE}"><strong>${escapeHtml(line)}</strong></p>`);
+      const headerText = line.endsWith(':') ? line.slice(0, -1).trim() : line;
+      currentSection = headerText;
+      htmlParts.push(`<p style="${SECTION_HEADER_STYLE}"><strong>${escapeHtml(headerText)}</strong></p>`);
       continue;
     }
 
-    const separatorIndex = line.indexOf(':');
-    if (separatorIndex > 0) {
-      const label = line.slice(0, separatorIndex).trim();
-      const originalValue = line.slice(separatorIndex + 1).trim();
+    const fields = findFieldsInLine(line);
+    if (fields.length === 0) {
+      // linha de texto livre (paragrafo normal, sem rotulo)
+      htmlParts.push(`<p>${escapeHtml(line)}</p>`);
+      continue;
+    }
 
-      const sectionMap = currentSection ? config.sections[findSectionKey(config, currentSection)] : undefined;
-      let template = findTemplate(sectionMap, label);
-      if (template === undefined) {
-        template = findTemplate(config.fallback, label);
-      }
+    const sectionMap = currentSection ? config.sections[findSectionKey(config, currentSection)] : undefined;
+    const pieces: string[] = [];
+
+    fields.forEach((field, i) => {
+      const valueEnd = i + 1 < fields.length ? fields[i + 1].labelStart : line.length;
+      const originalValue = line.slice(field.valueStart, valueEnd).trim();
+
+      let template = findTemplate(sectionMap, field.label);
+      if (template === undefined) template = findTemplate(config.fallback, field.label);
 
       if (template === undefined) {
         // rotulo desconhecido: negrita mas mantem o valor, e avisa
-        unmapped.add(currentSection ? `${currentSection} > ${label}` : label);
-        htmlParts.push(`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(originalValue)}</p>`);
+        unmapped.add(currentSection ? `${currentSection} > ${field.label}` : field.label);
+        pieces.push(`<strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(originalValue)}`);
       } else if (template === null) {
-        // campo fixo: mantem o valor original digitado
-        htmlParts.push(`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(originalValue)}</p>`);
+        // campo fixo/boilerplate: mantem o valor original digitado
+        pieces.push(`<strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(originalValue)}`);
       } else {
         // campo dinamico: troca pelo(s) coringa(s), descarta o valor digitado
-        htmlParts.push(`<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(template)}</p>`);
+        pieces.push(`<strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(template)}`);
       }
-      continue;
-    }
+    });
 
-    // linha de texto livre (paragrafo normal, sem rotulo)
-    htmlParts.push(`<p>${escapeHtml(line)}</p>`);
+    htmlParts.push(`<p>${pieces.join('&nbsp;&nbsp;&nbsp;&nbsp;')}</p>`);
   }
 
   return { html: htmlParts.join('\n'), unmappedFields: Array.from(unmapped) };
