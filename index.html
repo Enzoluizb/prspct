@@ -12,7 +12,7 @@
       <p class="subtitle">Cola o texto do Word, clica em Formatar, copia o HTML pronto pro Prisma.</p>
       <nav class="tabs">
         <button class="tab-btn active" data-tab="formatar">Formatar</button>
-        <button class="tab-btn" data-tab="mapeamento">Coringas / Mapeamento</button>
+        <button class="tab-btn" data-tab="mapeamento">Coringas / Negrito</button>
       </nav>
     </header>
 
@@ -23,6 +23,7 @@
             <label for="input-text">1. Cole aqui o texto do Word</label>
             <textarea id="input-text" placeholder="LOCATÁRIO&#10;&#10;Nome: João da Silva&#10;CPF: 123.456.789-00&#10;..."></textarea>
             <button id="btn-format" class="primary">Formatar para o Prisma</button>
+            <label class="checkbox-label"><input type="checkbox" id="chk-footer" /> Anexar rodapé fixo configurado</label>
             <div id="unmapped-warning" class="warning hidden"></div>
           </div>
 
@@ -40,14 +41,50 @@
 
       <section id="tab-mapeamento" class="tab-panel">
         <p class="help-text">
-          Aqui ficam as regras de formatação: qual rótulo vira qual coringa. Campo sem coringa
-          (deixe em branco) mantém o valor digitado como está — use isso pra dados fixos, tipo os
-          da própria empresa. As mudanças ficam salvas neste navegador; use "Exportar" pra guardar
-          um backup ou compartilhar com outra pessoa (ela usa "Importar").
+          Não existe um padrão fixo de seção — o texto pode vir em qualquer ordem, com
+          qualquer título. As regras abaixo valem pro texto inteiro. As mudanças ficam
+          salvas neste navegador; use "Exportar" pra guardar um backup ou compartilhar
+          com outra pessoa (ela usa "Importar").
         </p>
-        <div id="sections-container"></div>
+
+        <div class="rules-block">
+          <h3>Negritar sempre</h3>
+          <p class="help-text">
+            Palavras ou frases que devem ficar em negrito em qualquer lugar do texto
+            (ex: LOCADORA, BOX), mesmo fora de um campo "Rótulo: valor". Não diferencia
+            maiúscula de minúscula.
+          </p>
+          <div id="bold-words-container"></div>
+          <button id="btn-add-bold-word" class="secondary small-btn">+ Palavra</button>
+        </div>
+
+        <div class="rules-block">
+          <h3>Coringas por rótulo</h3>
+          <p class="help-text">
+            Quando o texto tiver "Rótulo: valor" (ex: "Nome: João"), o rótulo fica em
+            negrito e o valor é trocado pelo coringa. Deixe o coringa vazio pra manter
+            o valor digitado como está. O "grupo" é só pra organizar a tela — mas se o
+            <em>mesmo</em> rótulo existir em mais de um grupo (ex: "E-mail" do cliente e
+            "E-mail" da unidade), comece o nome do grupo com uma palavra que apareça no
+            título dessa seção no seu texto (ex: grupo "Locadora..." pra um rótulo que
+            só aparece embaixo do título "LOCADORA") — assim o formatador escolhe o
+            certo sozinho.
+          </p>
+          <div id="coringas-container"></div>
+          <button id="btn-add-coringa" class="secondary small-btn">+ Coringa</button>
+        </div>
+
+        <div class="rules-block">
+          <h3>Rodapé fixo (opcional)</h3>
+          <p class="help-text">
+            HTML fixo (ex: bloco de assinatura e testemunhas) que pode ser anexado
+            automaticamente ao final do texto formatado, já que costuma ser igual em
+            todo contrato.
+          </p>
+          <textarea id="footer-html" placeholder="&lt;p&gt;...&lt;/p&gt;"></textarea>
+        </div>
+
         <div class="mapping-actions">
-          <button id="btn-add-section" class="secondary">+ Nova seção</button>
           <button id="btn-export" class="secondary">Exportar JSON</button>
           <button id="btn-import" class="secondary">Importar JSON</button>
           <input type="file" id="import-file" accept="application/json" class="hidden" />

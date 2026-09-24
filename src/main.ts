@@ -1,8 +1,8 @@
 import './style.css';
 import { formatProspecto } from './formatter';
-import { loadMapping, saveMapping, resetMapping, type MappingConfig } from './mappings';
+import { loadRules, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
 
-let mapping: MappingConfig = loadMapping();
+let rules: RulesConfig = loadRules();
 
 // ---------- Tabs ----------
 const tabButtons = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
@@ -25,11 +25,20 @@ const unmappedWarning = document.getElementById('unmapped-warning') as HTMLDivEl
 const btnFormat = document.getElementById('btn-format') as HTMLButtonElement;
 const btnCopy = document.getElementById('btn-copy') as HTMLButtonElement;
 const copyFeedback = document.getElementById('copy-feedback') as HTMLSpanElement;
+const chkFooter = document.getElementById('chk-footer') as HTMLInputElement;
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 btnFormat.addEventListener('click', () => {
-  const result = formatProspecto(inputText.value, mapping);
-  outputHtml.value = result.html;
-  outputPreview.innerHTML = result.html;
+  const result = formatProspecto(inputText.value, rules);
+  let html = result.html;
+  if (chkFooter.checked && rules.footerHtml.trim()) {
+    html += `\n\n${rules.footerHtml.trim()}`;
+  }
+  outputHtml.value = html;
+  outputPreview.innerHTML = html;
 
   if (result.unmappedFields.length > 0) {
     unmappedWarning.classList.remove('hidden');
@@ -49,160 +58,136 @@ btnCopy.addEventListener('click', async () => {
   setTimeout(() => copyFeedback.classList.add('hidden'), 1500);
 });
 
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// ---------- Mapeamento ----------
-const sectionsContainer = document.getElementById('sections-container') as HTMLDivElement;
-const btnAddSection = document.getElementById('btn-add-section') as HTMLButtonElement;
+// ---------- Coringas / Negrito ----------
+const boldWordsContainer = document.getElementById('bold-words-container') as HTMLDivElement;
+const btnAddBoldWord = document.getElementById('btn-add-bold-word') as HTMLButtonElement;
+const coringasContainer = document.getElementById('coringas-container') as HTMLDivElement;
+const btnAddCoringa = document.getElementById('btn-add-coringa') as HTMLButtonElement;
+const footerHtmlInput = document.getElementById('footer-html') as HTMLTextAreaElement;
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const btnImport = document.getElementById('btn-import') as HTMLButtonElement;
 const importFile = document.getElementById('import-file') as HTMLInputElement;
 const btnReset = document.getElementById('btn-reset') as HTMLButtonElement;
 
-function renderMappingEditor(): void {
-  sectionsContainer.innerHTML = '';
-
-  for (const sectionTitle of Object.keys(mapping.sections)) {
-    sectionsContainer.appendChild(buildSectionBlock(sectionTitle));
-  }
-  sectionsContainer.appendChild(buildSectionBlock(null, mapping.fallback, 'Fora de qualquer seção'));
+function persist(): void {
+  saveRules(rules);
 }
 
-function buildSectionBlock(
-  sectionTitle: string | null,
-  overrideFields?: Record<string, string | null>,
-  fixedLabel?: string,
-): HTMLDivElement {
-  const isFallback = sectionTitle === null;
-  const fields = overrideFields ?? mapping.sections[sectionTitle as string];
+function renderRulesEditor(): void {
+  renderBoldWords();
+  renderCoringas();
+  footerHtmlInput.value = rules.footerHtml;
+}
 
-  const block = document.createElement('div');
-  block.className = 'section-block';
+function renderBoldWords(): void {
+  boldWordsContainer.innerHTML = '';
+  rules.boldWords.forEach((word, index) => {
+    const row = document.createElement('div');
+    row.className = 'bold-word-row';
 
-  const header = document.createElement('div');
-  header.className = 'section-block-header';
-
-  if (isFallback) {
-    const span = document.createElement('strong');
-    span.textContent = fixedLabel ?? 'Fallback';
-    header.appendChild(span);
-  } else {
-    const titleInput = document.createElement('input');
-    titleInput.value = sectionTitle as string;
-    titleInput.addEventListener('change', () => {
-      const newTitle = titleInput.value.trim();
-      if (!newTitle || newTitle === sectionTitle) {
-        titleInput.value = sectionTitle as string;
-        return;
-      }
-      const entries = Object.entries(mapping.sections);
-      const newSections: MappingConfig['sections'] = {};
-      for (const [key, value] of entries) {
-        newSections[key === sectionTitle ? newTitle : key] = value;
-      }
-      mapping.sections = newSections;
-      persistAndRerender();
+    const input = document.createElement('input');
+    input.value = word;
+    input.placeholder = 'Ex: LOCADORA';
+    input.addEventListener('change', () => {
+      rules.boldWords[index] = input.value;
+      persist();
     });
-    header.appendChild(titleInput);
 
-    const removeSectionBtn = document.createElement('button');
-    removeSectionBtn.className = 'secondary small-btn';
-    removeSectionBtn.textContent = 'Remover seção';
-    removeSectionBtn.addEventListener('click', () => {
-      delete mapping.sections[sectionTitle as string];
-      persistAndRerender();
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-field';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remover';
+    removeBtn.addEventListener('click', () => {
+      rules.boldWords.splice(index, 1);
+      persist();
+      renderBoldWords();
     });
-    header.appendChild(removeSectionBtn);
-  }
 
-  block.appendChild(header);
-
-  const fieldsWrap = document.createElement('div');
-  for (const label of Object.keys(fields)) {
-    fieldsWrap.appendChild(buildFieldRow(fields, label));
-  }
-  block.appendChild(fieldsWrap);
-
-  const addFieldBtn = document.createElement('button');
-  addFieldBtn.className = 'secondary small-btn';
-  addFieldBtn.textContent = '+ Campo';
-  addFieldBtn.addEventListener('click', () => {
-    let newLabel = 'Novo campo';
-    let i = 2;
-    while (newLabel in fields) {
-      newLabel = `Novo campo ${i++}`;
-    }
-    fields[newLabel] = null;
-    persistAndRerender();
+    row.append(input, removeBtn);
+    boldWordsContainer.appendChild(row);
   });
-  block.appendChild(addFieldBtn);
-
-  return block;
 }
 
-function buildFieldRow(fields: Record<string, string | null>, label: string): HTMLDivElement {
+btnAddBoldWord.addEventListener('click', () => {
+  rules.boldWords.push('');
+  persist();
+  renderBoldWords();
+});
+
+function renderCoringas(): void {
+  coringasContainer.innerHTML = '';
+
+  if (rules.coringas.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'coringa-row-header';
+    header.innerHTML = '<span>Rótulo</span><span>Coringa</span><span>Grupo</span><span></span>';
+    coringasContainer.appendChild(header);
+  }
+
+  rules.coringas.forEach((rule) => {
+    coringasContainer.appendChild(buildCoringaRow(rule));
+  });
+}
+
+function buildCoringaRow(rule: CoringaRule): HTMLDivElement {
   const row = document.createElement('div');
-  row.className = 'field-row';
+  row.className = 'coringa-row';
 
   const labelInput = document.createElement('input');
-  labelInput.placeholder = 'Rótulo (ex: Nome)';
-  labelInput.value = label;
+  labelInput.value = rule.label;
+  labelInput.placeholder = 'Ex: Nome';
   labelInput.addEventListener('change', () => {
-    const newLabel = labelInput.value.trim();
-    if (!newLabel || newLabel === label) {
-      labelInput.value = label;
-      return;
-    }
-    const value = fields[label];
-    delete fields[label];
-    fields[newLabel] = value;
-    persistAndRerender();
+    rule.label = labelInput.value;
+    persist();
   });
 
-  const templateInput = document.createElement('input');
-  templateInput.placeholder = 'Coringa (ex: {NOME_CLIENTE}) — vazio = manter valor digitado';
-  templateInput.value = fields[label] ?? '';
-  templateInput.addEventListener('change', () => {
-    fields[label] = templateInput.value.trim() || null;
-    saveMapping(mapping);
+  const coringaInput = document.createElement('input');
+  coringaInput.value = rule.coringa;
+  coringaInput.placeholder = 'Ex: {NOME_CLIENTE} (vazio = manter valor digitado)';
+  coringaInput.addEventListener('change', () => {
+    rule.coringa = coringaInput.value;
+    persist();
+  });
+
+  const groupInput = document.createElement('input');
+  groupInput.value = rule.group;
+  groupInput.placeholder = 'Ex: Locatário (cliente)';
+  groupInput.addEventListener('change', () => {
+    rule.group = groupInput.value;
+    persist();
   });
 
   const removeBtn = document.createElement('button');
   removeBtn.className = 'remove-field';
   removeBtn.textContent = '✕';
-  removeBtn.title = 'Remover campo';
+  removeBtn.title = 'Remover';
   removeBtn.addEventListener('click', () => {
-    delete fields[label];
-    persistAndRerender();
+    rules.coringas = rules.coringas.filter((r) => r.id !== rule.id);
+    persist();
+    renderCoringas();
   });
 
-  row.append(labelInput, templateInput, removeBtn);
+  row.append(labelInput, coringaInput, groupInput, removeBtn);
   return row;
 }
 
-function persistAndRerender(): void {
-  saveMapping(mapping);
-  renderMappingEditor();
-}
+btnAddCoringa.addEventListener('click', () => {
+  rules.coringas.push({ id: newRuleId(), label: '', coringa: '', group: '' });
+  persist();
+  renderCoringas();
+});
 
-btnAddSection.addEventListener('click', () => {
-  let newTitle = 'NOVA SEÇÃO';
-  let i = 2;
-  while (newTitle in mapping.sections) {
-    newTitle = `NOVA SEÇÃO ${i++}`;
-  }
-  mapping.sections[newTitle] = {};
-  persistAndRerender();
+footerHtmlInput.addEventListener('change', () => {
+  rules.footerHtml = footerHtmlInput.value;
+  persist();
 });
 
 btnExport.addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(mapping, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'mapeamento-prospecto.json';
+  a.download = 'regras-prospecto.json';
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -215,9 +200,13 @@ importFile.addEventListener('change', async () => {
   try {
     const text = await file.text();
     const parsed = JSON.parse(text);
-    if (!parsed.sections || !parsed.fallback) throw new Error('formato inválido');
-    mapping = parsed as MappingConfig;
-    persistAndRerender();
+    if (!Array.isArray(parsed.coringas) || !Array.isArray(parsed.boldWords)) {
+      throw new Error('formato inválido');
+    }
+    if (typeof parsed.footerHtml !== 'string') parsed.footerHtml = '';
+    rules = parsed as RulesConfig;
+    persist();
+    renderRulesEditor();
   } catch (err) {
     alert('Não foi possível importar esse arquivo: ' + (err as Error).message);
   } finally {
@@ -226,9 +215,9 @@ importFile.addEventListener('change', async () => {
 });
 
 btnReset.addEventListener('click', () => {
-  if (!confirm('Isso vai apagar suas alterações e voltar ao mapeamento padrão. Continuar?')) return;
-  mapping = resetMapping();
-  renderMappingEditor();
+  if (!confirm('Isso vai apagar suas alterações e voltar às regras padrão. Continuar?')) return;
+  rules = resetRules();
+  renderRulesEditor();
 });
 
-renderMappingEditor();
+renderRulesEditor();

@@ -1,100 +1,120 @@
-// Configuracao de formatacao: como cada "Rotulo: valor" deve virar HTML pro Prisma.
+// Configuracao de formatacao. Duas listas, totalmente editaveis na aba
+// "Coringas / Negrito" (nada aqui e fixo por unidade/contrato):
 //
-// Estrutura:
-// - Cada SECAO (ex: "LOCATARIO", "LOCADOR") e identificada por uma linha que so tem
-//   o titulo (sem ":"), tipo "LOCATARIO" sozinho numa linha.
-// - Dentro de uma secao, cada CAMPO conhecido (ex: "Nome") tem um "template" que diz
-//   o que colocar no lugar do valor digitado.
-//     - Se o template tiver um coringa (ex: "{NOME_CLIENTE}"), o valor original e
-//       DESCARTADO e substituido pelo coringa (o dado fica dinamico, vem do contrato).
-//     - Se o campo nao tiver template (mapeado como null), o valor digitado e
-//       MANTIDO como esta, so o rotulo fica em negrito (dado fixo, ex: dados da empresa).
-// - Campo que aparece no texto mas nao esta cadastrado aqui: o rotulo ainda fica em
-//   negrito (fica bonito do mesmo jeito) mas o valor e mantido, e ele entra na lista
-//   de "nao mapeados" pra voce saber que pode cadastrar um coringa se for o caso.
+// 1) coringas: campos no formato "Rótulo: valor" (ex: "Contratante: Fulano") viram
+//    "<b>Rótulo:</b> {O_CORINGA}". Não depende de em qual "seção" do texto o campo
+//    está — o rótulo é procurado em qualquer lugar do texto colado.
+//    O "grupo" é só pra organizar a tela (ex: "Locatário", "Locadora", "Locação"),
+//    não afeta a formatação.
+//
+// 2) boldWords: palavras/frases que devem SEMPRE ficar em negrito onde aparecerem
+//    no texto (dentro ou fora de um campo "Rótulo: valor"), ex: "LOCATÁRIO(A)", "BOX".
 
-export interface SectionMap {
-  // chave = nome do rotulo como aparece antes dos ":" (comparacao ignora maiusc/minusc e espacos)
-  // valor = template com o(s) coringa(s), ou null para manter o valor original (dado fixo)
-  [label: string]: string | null;
+export interface CoringaRule {
+  id: string;
+  label: string;
+  coringa: string;
+  group: string;
 }
 
-export interface MappingConfig {
-  // chave = titulo da secao (linha sozinha, ex: "LOCATARIO"), comparacao ignora maiusc/minusc
-  sections: {
-    [sectionTitle: string]: SectionMap;
-  };
-  // usado quando um campo aparece fora de qualquer secao reconhecida
-  fallback: SectionMap;
+export interface RulesConfig {
+  coringas: CoringaRule[];
+  boldWords: string[];
+  // HTML fixo (assinatura, testemunhas etc) que pode ser anexado ao final do
+  // texto formatado. Como esse bloco costuma ser idêntico em todo contrato,
+  // é mais simples configurar uma vez aqui do que tentar adivinhar a partir do texto.
+  footerHtml: string;
 }
 
-export const DEFAULT_MAPPING: MappingConfig = {
-  sections: {
-    // Baseado no prospecto-modelo (contrato de locação de BOX). Nomes de seção
-    // aqui devem bater com o texto do título na linha (sem o ":" final, se tiver).
-    'LOCATÁRIO(A)': {
-      Nome: '{NOME_CLIENTE}',
-      Contratante: '{NOME_CLIENTE}',
-      'Profissão/Ramo de Atividade': '{CLIENTE_ATIVIDADE}',
-      CPF: '{CPF_CNPJ_CLIENTE}',
-      CNPJ: '{CPF_CNPJ_CLIENTE}',
-      'CPF/CNPJ': '{CPF_CNPJ_CLIENTE}',
-      RG: '{RG_CLIENTE}',
-      Endereço: '{ENDERECO_COMPLETO_CLIENTE}',
-      'Endereço de correspondência': '{ENDERECO_CLIENTE}',
-      Telefone: '{TELEFONE2_CLIENTE}',
-      Telefone1: '{TELEFONE1_CLIENTE}',
-      Telefone2: '{TELEFONE2_CLIENTE}',
-      Telefones: '{TELEFONE1_CLIENTE} {TELEFONE2_CLIENTE}',
-      'E-mail': '{EMAIL_CLIENTE}',
-      Email: '{EMAIL_CLIENTE}',
-    },
-    'II - LOCADORA': {
-      // a "locadora" e a unidade de self storage nossa cliente: os dados dela
-      // tambem sao dinamicos (mudam de unidade pra unidade), por isso viram coringa.
-      'Denominação social': '{UNIDADE_FANTASIA}',
-      'Inscrição no CNPJ/MF': '{CNPJ_UNIDADE}',
-      'Razão Social': '{UNIDADE}',
-      'Sede Social': '{ENDERECO_COMPLETO_UNIDADE}',
-      'Pix para pagamentos': '{CNPJ_UNIDADE}',
-      'Telefone da Empresa': '{TEL2_UNIDADE}',
-      'E-mail': '{EMAIL_UNIDADE}',
-    },
-    'III - LOCAÇÃO': {
-      'Valor da locação': '{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})',
-      Desconto: '{PERC_FIXO_DESCONTO_CONTRATO}',
-      'Início da Locação': '{DT_INICIO_CONTRATO}',
-      'Término da Locação': '{DT_FIM_CONTRATO} {DT_VENCIMENTO_CONTRATO}',
-      // texto padrao (boilerplate) que se repete igual em todo contrato: mantem como digitado
-      'Prazo de Renovação': null,
-      'Número e Metragem do(s) BOXE(s)': 'Box nº {BOXES_CONTRATO}, com {BOXES_M2}.',
-    },
-  },
-  fallback: {},
+let idCounter = 0;
+function id(): string {
+  idCounter += 1;
+  return `r${Date.now().toString(36)}${idCounter}`;
+}
+
+function coringa(label: string, value: string, group: string): CoringaRule {
+  return { id: id(), label, coringa: value, group };
+}
+
+export const DEFAULT_RULES: RulesConfig = {
+  coringas: [
+    // Locatário (cliente)
+    coringa('Nome', '{NOME_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Contratante', '{NOME_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Profissão/Ramo de Atividade', '{CLIENTE_ATIVIDADE}', 'Locatário (cliente)'),
+    coringa('CPF', '{CPF_CNPJ_CLIENTE}', 'Locatário (cliente)'),
+    coringa('CNPJ', '{CPF_CNPJ_CLIENTE}', 'Locatário (cliente)'),
+    coringa('CPF/CNPJ', '{CPF_CNPJ_CLIENTE}', 'Locatário (cliente)'),
+    coringa('RG', '{RG_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Endereço', '{ENDERECO_COMPLETO_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Endereço de correspondência', '{ENDERECO_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Telefone', '{TELEFONE2_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Telefone1', '{TELEFONE1_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Telefone2', '{TELEFONE2_CLIENTE}', 'Locatário (cliente)'),
+    coringa('E-mail', '{EMAIL_CLIENTE}', 'Locatário (cliente)'),
+    // estes 4 são um "chute" baseado no padrão dos outros coringas — confirme os
+    // nomes certos no sistema e ajuste aqui se precisar:
+    coringa('Bairro', '{BAIRRO_CLIENTE}', 'Locatário (cliente)'),
+    coringa('CEP', '{CEP_CLIENTE}', 'Locatário (cliente)'),
+    coringa('Cidade', '{CIDADE_CLIENTE}', 'Locatário (cliente)'),
+    coringa('UF', '{UF_CLIENTE}', 'Locatário (cliente)'),
+
+    // Locadora (a unidade de self storage, nossa cliente)
+    coringa('Denominação social', '{UNIDADE_FANTASIA}', 'Locadora (unidade)'),
+    coringa('Inscrição no CNPJ/MF', '{CNPJ_UNIDADE}', 'Locadora (unidade)'),
+    coringa('Razão Social', '{UNIDADE}', 'Locadora (unidade)'),
+    coringa('Sede Social', '{ENDERECO_COMPLETO_UNIDADE}', 'Locadora (unidade)'),
+    coringa('Pix para pagamentos', '{CNPJ_UNIDADE}', 'Locadora (unidade)'),
+    coringa('Telefone da Empresa', '{TEL2_UNIDADE}', 'Locadora (unidade)'),
+    coringa('E-mail', '{EMAIL_UNIDADE}', 'Locadora (unidade)'),
+    // chute — confirme o nome certo no sistema:
+    coringa('CEP', '{CEP_UNIDADE}', 'Locadora (unidade)'),
+
+    // Locação (dados do contrato em si)
+    coringa('Valor da locação', '{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})', 'Locação (contrato)'),
+    coringa('Desconto', '{PERC_FIXO_DESCONTO_CONTRATO}', 'Locação (contrato)'),
+    coringa('Início da Locação', '{DT_INICIO_CONTRATO}', 'Locação (contrato)'),
+    coringa('Término da Locação', '{DT_FIM_CONTRATO} {DT_VENCIMENTO_CONTRATO}', 'Locação (contrato)'),
+    // texto padrão (boilerplate), igual em todo contrato — mantém sempre esse texto
+    coringa(
+      'Prazo de Renovação',
+      '30 (trinta) dias prorrogável automaticamente pelo mesmo período após a data de término da locação.',
+      'Locação (contrato)',
+    ),
+    coringa('Número e Metragem do(s) BOXE(s)', 'Box nº {BOXES_CONTRATO}, com {BOXES_M2}.', 'Locação (contrato)'),
+    coringa('Valor total declarado', '{VALOR_TOTAL_BENS_DECLARADOS} {S_VALOR_TOTAL_BENS_DECLARADOS}', 'Locação (contrato)'),
+  ],
+  boldWords: ['LOCATÁRIO(A)', 'LOCADORA', 'BOX'],
+  footerHtml: '',
 };
 
-const STORAGE_KEY = 'prospecto-formatter:mapping';
+const STORAGE_KEY = 'prospecto-formatter:rules-v2';
 
-export function loadMapping(): MappingConfig {
+export function loadRules(): RulesConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(DEFAULT_MAPPING);
+    if (!raw) return structuredClone(DEFAULT_RULES);
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || !parsed.sections || !parsed.fallback) {
-      return structuredClone(DEFAULT_MAPPING);
+    if (!parsed || !Array.isArray(parsed.coringas) || !Array.isArray(parsed.boldWords)) {
+      return structuredClone(DEFAULT_RULES);
     }
-    return parsed as MappingConfig;
+    if (typeof parsed.footerHtml !== 'string') parsed.footerHtml = '';
+    return parsed as RulesConfig;
   } catch {
-    return structuredClone(DEFAULT_MAPPING);
+    return structuredClone(DEFAULT_RULES);
   }
 }
 
-export function saveMapping(config: MappingConfig): void {
+export function saveRules(config: RulesConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
 
-export function resetMapping(): MappingConfig {
-  const fresh = structuredClone(DEFAULT_MAPPING);
-  saveMapping(fresh);
+export function resetRules(): RulesConfig {
+  const fresh = structuredClone(DEFAULT_RULES);
+  saveRules(fresh);
   return fresh;
+}
+
+export function newRuleId(): string {
+  return id();
 }
