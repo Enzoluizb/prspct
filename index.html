@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formatador de Prospecto - Prisma</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Formatador de Prospecto</h1>
+      <p class="subtitle">Cola o texto do Word, clica em Formatar, copia o HTML pronto pro Prisma.</p>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="formatar">Formatar</button>
+        <button class="tab-btn" data-tab="mapeamento">Coringas / Mapeamento</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="tab-formatar" class="tab-panel active">
+        <div class="columns">
+          <div class="column">
+            <label for="input-text">1. Cole aqui o texto do Word</label>
+            <textarea id="input-text" placeholder="LOCATÁRIO&#10;&#10;Nome: João da Silva&#10;CPF: 123.456.789-00&#10;..."></textarea>
+            <button id="btn-format" class="primary">Formatar para o Prisma</button>
+            <div id="unmapped-warning" class="warning hidden"></div>
+          </div>
+
+          <div class="column">
+            <label for="output-preview">2. Prévia (como vai ficar)</label>
+            <div id="output-preview" class="preview"></div>
+
+            <label for="output-html">3. HTML pronto (cole em "Código-Fonte" no editor do Prisma)</label>
+            <textarea id="output-html" readonly></textarea>
+            <button id="btn-copy" class="secondary">Copiar HTML</button>
+            <span id="copy-feedback" class="feedback hidden">Copiado!</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-mapeamento" class="tab-panel">
+        <p class="help-text">
+          Aqui ficam as regras de formatação: qual rótulo vira qual coringa. Campo sem coringa
+          (deixe em branco) mantém o valor digitado como está — use isso pra dados fixos, tipo os
+          da própria empresa. As mudanças ficam salvas neste navegador; use "Exportar" pra guardar
+          um backup ou compartilhar com outra pessoa (ela usa "Importar").
+        </p>
+        <div id="sections-container"></div>
+        <div class="mapping-actions">
+          <button id="btn-add-section" class="secondary">+ Nova seção</button>
+          <button id="btn-export" class="secondary">Exportar JSON</button>
+          <button id="btn-import" class="secondary">Importar JSON</button>
+          <input type="file" id="import-file" accept="application/json" class="hidden" />
+          <button id="btn-reset" class="danger">Restaurar padrão</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
