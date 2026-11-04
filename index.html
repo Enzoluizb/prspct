@@ -53,6 +53,18 @@
           <div class="column">
             <label for="input-text">Cole aqui o texto do Word</label>
             <textarea id="input-text" placeholder="LOCATÁRIO&#10;&#10;Nome: João da Silva&#10;CPF: 123.456.789-00&#10;..."></textarea>
+
+            <label class="checkbox-label" for="chk-signature-texto">
+              <input type="checkbox" id="chk-signature-texto" />
+              Substituir assinatura final pelo padrão do Prisma
+            </label>
+            <p class="help-text">
+              Quando marcado, tudo a partir da linha "LOCADORA:" (o bloco de
+              assinatura/testemunhas que o cliente costuma mandar por e-mail) é
+              descartado e trocado pelo bloco de assinatura padrão já com os
+              coringas certos.
+            </p>
+
             <button id="btn-format-texto" class="primary">Formatar para o Prisma</button>
             <div id="unmapped-warning-texto" class="warning hidden"></div>
           </div>
@@ -188,6 +200,7 @@
             só aparece embaixo do título "LOCADORA") — assim o formatador escolhe o
             certo sozinho.
           </p>
+          <div id="group-filter" class="group-filter"></div>
           <div id="coringas-container"></div>
           <button id="btn-add-coringa" class="secondary small-btn">+ Coringa</button>
         </div>

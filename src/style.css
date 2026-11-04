@@ -398,6 +398,36 @@ button.danger {
   font-size: 13px;
 }
 
+.group-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.group-filter-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: auto;
+}
+
+.group-filter-chip:hover {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.group-filter-chip.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+  font-weight: 600;
+}
+
 .coringa-row-header {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr auto;
@@ -425,6 +455,21 @@ button.danger {
 .small-btn {
   padding: 6px 10px;
   font-size: 13px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.checkbox-label input {
+  width: auto;
 }
 
 /* ---------- Image uploader (Cabeçalho / Rodapé) ---------- */

@@ -2,6 +2,7 @@ import './style.css';
 import { formatProspecto } from './formatter';
 import { loadRules, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
 import { type ImageAsset, newImageId, fileToDataUrl, imageToken, applyImages } from './images';
+import { SIGNATURE_BLOCK_HTML, stripSignatureBlock } from './signatureBlock';
 
 let rules: RulesConfig = loadRules();
 
@@ -98,6 +99,7 @@ interface SectionConfig {
     placement: 'before' | 'after';
     assets: ImageAsset[];
   };
+  signatureCheckbox?: HTMLInputElement;
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -151,10 +153,16 @@ function setupSection(config: SectionConfig): void {
   }
 
   config.btnFormat.addEventListener('click', () => {
-    const result = formatProspecto(config.input.value, rules);
+    const useSignatureTemplate = config.signatureCheckbox?.checked ?? false;
+    const sourceText = useSignatureTemplate ? stripSignatureBlock(config.input.value) : config.input.value;
+
+    const result = formatProspecto(sourceText, rules);
     let html = result.html;
     if (config.images) {
       html = applyImages(html, config.images.assets, config.images.placement);
+    }
+    if (useSignatureTemplate) {
+      html = `${html}\n\n${SIGNATURE_BLOCK_HTML}`;
     }
     config.outputHtml.value = html;
     config.outputPreview.innerHTML = html;
@@ -186,6 +194,7 @@ setupSection({
   btnCopy: byId('btn-copy-texto'),
   copyFeedback: byId('copy-feedback-texto'),
   unmappedWarning: byId('unmapped-warning-texto'),
+  signatureCheckbox: byId<HTMLInputElement>('chk-signature-texto'),
 });
 
 setupSection({
@@ -250,23 +259,81 @@ btnCopyCss.addEventListener('click', async () => {
 
 // ---------- Coringas / Mapeamento ----------
 const coringasContainer = byId<HTMLDivElement>('coringas-container');
+const groupFilterContainer = byId<HTMLDivElement>('group-filter');
 const btnAddCoringa = byId<HTMLButtonElement>('btn-add-coringa');
 const btnExport = byId<HTMLButtonElement>('btn-export');
 const btnImport = byId<HTMLButtonElement>('btn-import');
 const importFile = byId<HTMLInputElement>('import-file');
 const btnReset = byId<HTMLButtonElement>('btn-reset');
 
+const NO_GROUP_LABEL = 'Sem grupo';
+let activeGroupFilter: string | null = null; // null = Todos
+
+// Grupos distintos cadastrados, na ordem em que aparecem (vira os filtros).
+function getGroups(): string[] {
+  const seen: string[] = [];
+  rules.coringas.forEach((rule) => {
+    const group = rule.group.trim() || NO_GROUP_LABEL;
+    if (!seen.includes(group)) seen.push(group);
+  });
+  return seen;
+}
+
+function renderGroupFilter(): void {
+  const groups = getGroups();
+
+  // se o filtro ativo não existe mais (grupo renomeado/removido), volta pra "Todos"
+  if (activeGroupFilter && !groups.includes(activeGroupFilter)) {
+    activeGroupFilter = null;
+  }
+
+  groupFilterContainer.innerHTML = '';
+
+  if (groups.length < 2) {
+    return; // não vale a pena filtrar com 0 ou 1 grupo só
+  }
+
+  const allChip = document.createElement('button');
+  allChip.type = 'button';
+  allChip.className = 'group-filter-chip' + (activeGroupFilter === null ? ' active' : '');
+  allChip.textContent = 'Todos';
+  allChip.addEventListener('click', () => {
+    activeGroupFilter = null;
+    renderGroupFilter();
+    renderCoringas();
+  });
+  groupFilterContainer.appendChild(allChip);
+
+  groups.forEach((group) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'group-filter-chip' + (activeGroupFilter === group ? ' active' : '');
+    chip.textContent = group;
+    chip.addEventListener('click', () => {
+      activeGroupFilter = group;
+      renderGroupFilter();
+      renderCoringas();
+    });
+    groupFilterContainer.appendChild(chip);
+  });
+}
+
 function renderCoringas(): void {
   coringasContainer.innerHTML = '';
 
-  if (rules.coringas.length > 0) {
+  const visible = rules.coringas.filter((rule) => {
+    if (activeGroupFilter === null) return true;
+    return (rule.group.trim() || NO_GROUP_LABEL) === activeGroupFilter;
+  });
+
+  if (visible.length > 0) {
     const header = document.createElement('div');
     header.className = 'coringa-row-header';
     header.innerHTML = '<span>Rótulo</span><span>Coringa</span><span>Grupo</span><span></span>';
     coringasContainer.appendChild(header);
   }
 
-  rules.coringas.forEach((rule) => {
+  visible.forEach((rule) => {
     coringasContainer.appendChild(buildCoringaRow(rule));
   });
 }
@@ -297,6 +364,8 @@ function buildCoringaRow(rule: CoringaRule): HTMLDivElement {
   groupInput.addEventListener('change', () => {
     rule.group = groupInput.value;
     persist();
+    renderGroupFilter();
+    renderCoringas();
   });
 
   const removeBtn = document.createElement('button');
@@ -306,6 +375,7 @@ function buildCoringaRow(rule: CoringaRule): HTMLDivElement {
   removeBtn.addEventListener('click', () => {
     rules.coringas = rules.coringas.filter((r) => r.id !== rule.id);
     persist();
+    renderGroupFilter();
     renderCoringas();
   });
 
@@ -314,8 +384,10 @@ function buildCoringaRow(rule: CoringaRule): HTMLDivElement {
 }
 
 btnAddCoringa.addEventListener('click', () => {
-  rules.coringas.push({ id: newRuleId(), label: '', coringa: '', group: '' });
+  const prefillGroup = activeGroupFilter && activeGroupFilter !== NO_GROUP_LABEL ? activeGroupFilter : '';
+  rules.coringas.push({ id: newRuleId(), label: '', coringa: '', group: prefillGroup });
   persist();
+  renderGroupFilter();
   renderCoringas();
 });
 
@@ -358,7 +430,9 @@ btnReset.addEventListener('click', () => {
 });
 
 function renderRulesEditor(): void {
+  activeGroupFilter = null;
   renderBoldWords();
+  renderGroupFilter();
   renderCoringas();
   inputCss.value = rules.customCss;
   renderCssOutput();

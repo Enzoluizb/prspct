@@ -115,6 +115,26 @@ function applyBoldAndSubstitutions(text: string, boldWords: string[], dynamicSub
   return result;
 }
 
+// Linha numerada (ex: "3." ou "3.1."): bota o número em negrito e, se o
+// resto for um título todo em caixa alta (ex: "3. OBJETO DA LOCAÇÃO"), nega
+// a linha inteira — do contrário é um parágrafo normal (ex: "3.1. O objeto
+// do presente...") e só o número fica em negrito. Nunca centraliza: cláusula
+// numerada sempre segue o fluxo normal do texto, igual no Word original.
+function renderNumberedOrPlain(raw: string, boldWords: string[], dynamicSubs: Map<string, string>): string {
+  const numberMatch = raw.match(/^(\d+(?:\.\d+)*\.?)(\s+)(.*)$/);
+  if (!numberMatch) return applyBoldAndSubstitutions(raw, boldWords, dynamicSubs);
+
+  const [, num, sep, rest] = numberMatch;
+  const hasLetter = /[A-Za-zÀ-ÿ]/.test(rest);
+  const hasLowercase = /[a-zà-ÿ]/.test(rest);
+  const isUpperTitle = hasLetter && !hasLowercase;
+
+  if (isUpperTitle) {
+    return `<strong>${escapeHtml(num)}${sep}${escapeHtml(rest)}</strong>`;
+  }
+  return `<strong>${escapeHtml(num)}</strong>${sep}${applyBoldAndSubstitutions(rest, boldWords, dynamicSubs)}`;
+}
+
 type LineKind = 'heading' | 'field' | 'prose';
 
 interface ParsedLine {
@@ -209,24 +229,48 @@ export function formatProspecto(rawText: string, config: RulesConfig): FormatRes
 
   // ---------- passo 4: agrupa linhas consecutivas em blocos ----------
   // heading/field seguidos formam um bloco só; heading sozinho (sem field junto)
-  // vira título centralizado; prose sempre é bloco próprio.
-  type Block = { lines: ParsedLine[] };
+  // vira título centralizado. Linhas de texto corrido (prose) consecutivas são
+  // juntadas num parágrafo só (merge: true) — o Word costuma quebrar a linha no
+  // meio da frase só por causa da largura da página, não porque é um parágrafo
+  // novo; só uma linha em branco ou o início de uma cláusula numerada nova
+  // (ex: "3.2.") encerra o parágrafo atual.
+  type Block = { lines: ParsedLine[]; merge?: boolean };
   const blocks: Block[] = [];
   let current: ParsedLine[] = [];
+  let proseLines: ParsedLine[] = [];
+  const CLAUSE_START_REGEX = /^\d+(?:\.\d+)*\.?\s/;
 
   function flush(): void {
     if (current.length > 0) blocks.push({ lines: current });
     current = [];
   }
 
+  function flushProse(): void {
+    if (proseLines.length > 0) blocks.push({ lines: proseLines, merge: true });
+    proseLines = [];
+  }
+
   for (const p of parsed) {
     if (p.kind === 'prose') {
-      flush();
-      if (p.raw) blocks.push({ lines: [p] });
+      if (!p.raw) {
+        flushProse();
+        flush();
+        continue;
+      }
+      if (CLAUSE_START_REGEX.test(p.raw)) {
+        flush();
+        flushProse();
+        proseLines = [p];
+      } else {
+        if (proseLines.length === 0) flush();
+        proseLines.push(p);
+      }
       continue;
     }
+    flushProse();
     current.push(p);
   }
+  flushProse();
   flush();
 
   // ---------- passo 5: renderiza cada bloco ----------
@@ -235,16 +279,17 @@ export function formatProspecto(rawText: string, config: RulesConfig): FormatRes
   for (const block of blocks) {
     const hasField = block.lines.some((l) => l.kind === 'field');
 
-    if (block.lines.length === 1 && block.lines[0].kind === 'prose') {
-      const line = block.lines[0];
-      const numberMatch = line.raw.match(/^(\d+(?:\.\d+)*\.?)(\s+)(.*)$/);
-      let content: string;
-      if (numberMatch) {
-        const [, num, sep, rest] = numberMatch;
-        content = `<strong>${escapeHtml(num)}</strong>${sep}${applyBoldAndSubstitutions(rest, config.boldWords, dynamicSubs)}`;
-      } else {
-        content = applyBoldAndSubstitutions(line.raw, config.boldWords, dynamicSubs);
-      }
+    if (block.merge) {
+      const joined = block.lines.map((l) => l.raw.trim()).join(' ');
+      const content = renderNumberedOrPlain(joined, config.boldWords, dynamicSubs);
+      htmlParts.push(`<p style="text-align: justify;">${content}</p>`);
+      continue;
+    }
+
+    // título de cláusula numerado sozinho (ex: "3. OBJETO DA LOCAÇÃO"), sem
+    // campos junto: segue o fluxo normal do texto, não centraliza.
+    if (block.lines.length === 1 && block.lines[0].kind === 'heading' && /^\d/.test(block.lines[0].raw)) {
+      const content = renderNumberedOrPlain(block.lines[0].raw, config.boldWords, dynamicSubs);
       htmlParts.push(`<p style="text-align: justify;">${content}</p>`);
       continue;
     }
