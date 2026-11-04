@@ -7,45 +7,36 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header class="app-header">
-      <h1>Formatador de Prospecto</h1>
-      <p class="subtitle">Cola o texto do Word, clica em Formatar, copia o HTML pronto pro Prisma.</p>
-      <nav class="tabs">
-        <button class="tab-btn active" data-tab="formatar">Formatar</button>
-        <button class="tab-btn" data-tab="mapeamento">Coringas / Negrito</button>
-      </nav>
-    </header>
+    <div class="topbar">
+      <div class="topbar-brand">
+        <span class="brand-mark">P</span>
+        <span class="brand-name">PROSPECTO</span>
+      </div>
+      <label class="theme-toggle" for="theme-switch">
+        <span class="theme-toggle-label">Modo escuro</span>
+        <input type="checkbox" id="theme-switch" />
+        <span class="theme-toggle-track"><span class="theme-toggle-thumb"></span></span>
+      </label>
+    </div>
+
+    <div class="breadcrumb">
+      <span class="breadcrumb-item">Texto Prospecto</span>
+      <span class="breadcrumb-sep">•</span>
+      <span class="breadcrumb-item muted">Formatador para o Prisma</span>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="texto">Texto</button>
+      <button class="tab-btn" data-tab="cabecalho">Cabeçalho</button>
+      <button class="tab-btn" data-tab="rodape">Rodapé</button>
+      <button class="tab-btn" data-tab="css">CSS</button>
+      <button class="tab-btn" data-tab="coringas">Coringas</button>
+    </nav>
 
     <main>
-      <section id="tab-formatar" class="tab-panel active">
-        <div class="columns">
-          <div class="column">
-            <label for="input-text">1. Cole aqui o texto do Word</label>
-            <textarea id="input-text" placeholder="LOCATÁRIO&#10;&#10;Nome: João da Silva&#10;CPF: 123.456.789-00&#10;..."></textarea>
-            <button id="btn-format" class="primary">Formatar para o Prisma</button>
-            <label class="checkbox-label"><input type="checkbox" id="chk-footer" /> Anexar rodapé fixo configurado</label>
-            <div id="unmapped-warning" class="warning hidden"></div>
-          </div>
-
-          <div class="column">
-            <label for="output-preview">2. Prévia (como vai ficar)</label>
-            <div id="output-preview" class="preview"></div>
-
-            <label for="output-html">3. HTML pronto (cole em "Código-Fonte" no editor do Prisma)</label>
-            <textarea id="output-html" readonly></textarea>
-            <button id="btn-copy" class="secondary">Copiar HTML</button>
-            <span id="copy-feedback" class="feedback hidden">Copiado!</span>
-          </div>
-        </div>
-      </section>
-
-      <section id="tab-mapeamento" class="tab-panel">
-        <p class="help-text">
-          Não existe um padrão fixo de seção — o texto pode vir em qualquer ordem, com
-          qualquer título. As regras abaixo valem pro texto inteiro. As mudanças ficam
-          salvas neste navegador; use "Exportar" pra guardar um backup ou compartilhar
-          com outra pessoa (ela usa "Importar").
-        </p>
+      <!-- ---------- TEXTO ---------- -->
+      <section id="tab-texto" class="tab-panel active">
+        <div class="panel-header"><span class="panel-icon">⚙</span><h2>TEXTO</h2></div>
 
         <div class="rules-block">
           <h3>Negritar sempre</h3>
@@ -57,6 +48,133 @@
           <div id="bold-words-container"></div>
           <button id="btn-add-bold-word" class="secondary small-btn">+ Palavra</button>
         </div>
+
+        <div class="columns">
+          <div class="column">
+            <label for="input-text">Cole aqui o texto do Word</label>
+            <textarea id="input-text" placeholder="LOCATÁRIO&#10;&#10;Nome: João da Silva&#10;CPF: 123.456.789-00&#10;..."></textarea>
+            <button id="btn-format-texto" class="primary">Formatar para o Prisma</button>
+            <div id="unmapped-warning-texto" class="warning hidden"></div>
+          </div>
+
+          <div class="column">
+            <label for="output-preview-texto">Prévia</label>
+            <div id="output-preview-texto" class="preview"></div>
+
+            <label for="output-html-texto">HTML pronto (cole em "Código-Fonte" no editor do Prisma)</label>
+            <textarea id="output-html-texto" readonly></textarea>
+            <button id="btn-copy-texto" class="secondary">Copiar HTML</button>
+            <span id="copy-feedback-texto" class="feedback hidden">Copiado!</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- CABEÇALHO ---------- -->
+      <section id="tab-cabecalho" class="tab-panel">
+        <div class="panel-header"><span class="panel-icon">⚙</span><h2>CABEÇALHO</h2></div>
+
+        <div class="columns">
+          <div class="column">
+            <label for="input-text-cabecalho">Texto do cabeçalho (opcional)</label>
+            <textarea id="input-text-cabecalho" placeholder="Texto fixo do cabeçalho, se houver..."></textarea>
+
+            <div class="image-uploader">
+              <label>Imagens (opcional)</label>
+              <input type="file" id="input-image-cabecalho" accept="image/*" multiple class="hidden" />
+              <button type="button" class="secondary small-btn" id="btn-add-image-cabecalho">+ Adicionar imagem</button>
+              <p class="help-text">
+                Use <code>{IMAGEM_1}</code>, <code>{IMAGEM_2}</code>... no texto acima pra
+                escolher onde cada imagem entra. Imagem sem token entra automaticamente no
+                topo do cabeçalho.
+              </p>
+              <div id="images-cabecalho" class="images-list"></div>
+            </div>
+
+            <button id="btn-format-cabecalho" class="primary">Formatar cabeçalho</button>
+            <div id="unmapped-warning-cabecalho" class="warning hidden"></div>
+          </div>
+
+          <div class="column">
+            <label for="output-preview-cabecalho">Prévia</label>
+            <div id="output-preview-cabecalho" class="preview"></div>
+
+            <label for="output-html-cabecalho">HTML pronto</label>
+            <textarea id="output-html-cabecalho" readonly></textarea>
+            <button id="btn-copy-cabecalho" class="secondary">Copiar HTML</button>
+            <span id="copy-feedback-cabecalho" class="feedback hidden">Copiado!</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- RODAPÉ ---------- -->
+      <section id="tab-rodape" class="tab-panel">
+        <div class="panel-header"><span class="panel-icon">⚙</span><h2>RODAPÉ</h2></div>
+
+        <div class="columns">
+          <div class="column">
+            <label for="input-text-rodape">Texto do rodapé (opcional)</label>
+            <textarea id="input-text-rodape" placeholder="Bloco de assinatura, testemunhas, etc..."></textarea>
+
+            <div class="image-uploader">
+              <label>Imagens (opcional)</label>
+              <input type="file" id="input-image-rodape" accept="image/*" multiple class="hidden" />
+              <button type="button" class="secondary small-btn" id="btn-add-image-rodape">+ Adicionar imagem</button>
+              <p class="help-text">
+                Use <code>{IMAGEM_1}</code>, <code>{IMAGEM_2}</code>... no texto acima pra
+                escolher onde cada imagem entra. Imagem sem token entra automaticamente no
+                final do rodapé.
+              </p>
+              <div id="images-rodape" class="images-list"></div>
+            </div>
+
+            <button id="btn-format-rodape" class="primary">Formatar rodapé</button>
+            <div id="unmapped-warning-rodape" class="warning hidden"></div>
+          </div>
+
+          <div class="column">
+            <label for="output-preview-rodape">Prévia</label>
+            <div id="output-preview-rodape" class="preview"></div>
+
+            <label for="output-html-rodape">HTML pronto</label>
+            <textarea id="output-html-rodape" readonly></textarea>
+            <button id="btn-copy-rodape" class="secondary">Copiar HTML</button>
+            <span id="copy-feedback-rodape" class="feedback hidden">Copiado!</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- CSS ---------- -->
+      <section id="tab-css" class="tab-panel">
+        <div class="panel-header"><span class="panel-icon">⚙</span><h2>CSS</h2></div>
+        <p class="help-text">
+          Extra — só preencha se o contrato precisar de algum estilo próprio além do
+          padrão do Prisma. Na maioria dos casos pode deixar em branco.
+        </p>
+
+        <div class="columns">
+          <div class="column">
+            <label for="input-css">CSS personalizado</label>
+            <textarea id="input-css" placeholder="p { color: #333; }"></textarea>
+          </div>
+
+          <div class="column">
+            <label for="output-css">Código pronto (bloco &lt;style&gt;)</label>
+            <textarea id="output-css" readonly></textarea>
+            <button id="btn-copy-css" class="secondary">Copiar CSS</button>
+            <span id="copy-feedback-css" class="feedback hidden">Copiado!</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- CORINGAS ---------- -->
+      <section id="tab-coringas" class="tab-panel">
+        <div class="panel-header"><span class="panel-icon">⚙</span><h2>CORINGAS</h2></div>
+        <p class="help-text">
+          Não existe um padrão fixo de seção — o texto pode vir em qualquer ordem, com
+          qualquer título. As regras abaixo valem pro texto inteiro (Texto, Cabeçalho e
+          Rodapé). As mudanças ficam salvas neste navegador; use "Exportar" pra guardar
+          um backup ou compartilhar com outra pessoa (ela usa "Importar").
+        </p>
 
         <div class="rules-block">
           <h3>Coringas por rótulo</h3>
@@ -72,16 +190,6 @@
           </p>
           <div id="coringas-container"></div>
           <button id="btn-add-coringa" class="secondary small-btn">+ Coringa</button>
-        </div>
-
-        <div class="rules-block">
-          <h3>Rodapé fixo (opcional)</h3>
-          <p class="help-text">
-            HTML fixo (ex: bloco de assinatura e testemunhas) que pode ser anexado
-            automaticamente ao final do texto formatado, já que costuma ser igual em
-            todo contrato.
-          </p>
-          <textarea id="footer-html" placeholder="&lt;p&gt;...&lt;/p&gt;"></textarea>
         </div>
 
         <div class="mapping-actions">

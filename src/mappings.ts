@@ -20,10 +20,8 @@ export interface CoringaRule {
 export interface RulesConfig {
   coringas: CoringaRule[];
   boldWords: string[];
-  // HTML fixo (assinatura, testemunhas etc) que pode ser anexado ao final do
-  // texto formatado. Como esse bloco costuma ser idêntico em todo contrato,
-  // é mais simples configurar uma vez aqui do que tentar adivinhar a partir do texto.
-  footerHtml: string;
+  // CSS personalizado opcional, reaproveitado entre contratos (aba "CSS").
+  customCss: string;
 }
 
 let idCounter = 0;
@@ -85,10 +83,10 @@ export const DEFAULT_RULES: RulesConfig = {
     coringa('Valor total declarado', '{VALOR_TOTAL_BENS_DECLARADOS} {S_VALOR_TOTAL_BENS_DECLARADOS}', 'Locação (contrato)'),
   ],
   boldWords: ['LOCATÁRIO(A)', 'LOCADORA', 'BOX'],
-  footerHtml: '',
+  customCss: '',
 };
 
-const STORAGE_KEY = 'prospecto-formatter:rules-v2';
+const STORAGE_KEY = 'prospecto-formatter:rules-v3';
 
 export function loadRules(): RulesConfig {
   try {
@@ -98,7 +96,7 @@ export function loadRules(): RulesConfig {
     if (!parsed || !Array.isArray(parsed.coringas) || !Array.isArray(parsed.boldWords)) {
       return structuredClone(DEFAULT_RULES);
     }
-    if (typeof parsed.footerHtml !== 'string') parsed.footerHtml = '';
+    if (typeof parsed.customCss !== 'string') parsed.customCss = '';
     return parsed as RulesConfig;
   } catch {
     return structuredClone(DEFAULT_RULES);
