@@ -62,6 +62,7 @@ export const DEFAULT_RULES: RulesConfig = {
     coringa('Inscrição no CNPJ/MF', '{CNPJ_UNIDADE}', 'Locadora (unidade)'),
     coringa('Razão Social', '{UNIDADE}', 'Locadora (unidade)'),
     coringa('Sede Social', '{ENDERECO_COMPLETO_UNIDADE}', 'Locadora (unidade)'),
+    coringa('Endereço', '{ENDERECO_COMPLETO_UNIDADE}', 'Locadora (unidade)'),
     coringa('Pix para pagamentos', '{CNPJ_UNIDADE}', 'Locadora (unidade)'),
     coringa('Telefone da Empresa', '{TEL2_UNIDADE}', 'Locadora (unidade)'),
     coringa('E-mail', '{EMAIL_UNIDADE}', 'Locadora (unidade)'),

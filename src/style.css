@@ -68,25 +68,17 @@ body {
   color: var(--navbar-text);
 }
 
-.topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  font-size: 16px;
+.topbar-title {
+  font-size: 13px;
+  color: var(--navbar-text);
 }
 
-.brand-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--accent-red);
-  color: #fff;
-  font-size: 15px;
+.topbar-title-item.muted {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.topbar-title-sep {
+  margin: 0 6px;
 }
 
 .theme-toggle {
@@ -130,22 +122,7 @@ body {
   transform: translateX(18px);
 }
 
-/* ---------- Breadcrumb + Tabs ---------- */
-
-.breadcrumb {
-  padding: 14px 32px 0;
-  background: var(--surface);
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.breadcrumb-item.muted {
-  color: var(--text-muted);
-}
-
-.breadcrumb-sep {
-  margin: 0 6px;
-}
+/* ---------- Tabs ---------- */
 
 .tabs {
   display: flex;
@@ -470,65 +447,4 @@ button.danger {
 
 .checkbox-label input {
   width: auto;
-}
-
-/* ---------- Image uploader (Cabeçalho / Rodapé) ---------- */
-
-.image-uploader {
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--surface-alt);
-}
-
-.images-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.image-item {
-  position: relative;
-  width: 84px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.image-item img {
-  width: 84px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
-
-.image-item .image-token {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 4px;
-  font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
-}
-
-.image-item .remove-field {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  line-height: 1;
-  padding: 0;
-  font-size: 11px;
 }

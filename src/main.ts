@@ -1,7 +1,6 @@
 import './style.css';
 import { formatProspecto } from './formatter';
 import { loadRules, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
-import { type ImageAsset, newImageId, fileToDataUrl, imageToken, applyImages } from './images';
 import { SIGNATURE_BLOCK_HTML, stripSignatureBlock } from './signatureBlock';
 
 let rules: RulesConfig = loadRules();
@@ -92,13 +91,6 @@ interface SectionConfig {
   btnCopy: HTMLButtonElement;
   copyFeedback: HTMLSpanElement;
   unmappedWarning: HTMLDivElement;
-  images?: {
-    container: HTMLDivElement;
-    fileInput: HTMLInputElement;
-    addBtn: HTMLButtonElement;
-    placement: 'before' | 'after';
-    assets: ImageAsset[];
-  };
   signatureCheckbox?: HTMLInputElement;
 }
 
@@ -107,60 +99,12 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 function setupSection(config: SectionConfig): void {
-  function renderImages(): void {
-    const imgs = config.images;
-    if (!imgs) return;
-    imgs.container.innerHTML = '';
-    imgs.assets.forEach((asset, index) => {
-      const item = document.createElement('div');
-      item.className = 'image-item';
-
-      const thumb = document.createElement('img');
-      thumb.src = asset.dataUrl;
-      thumb.alt = asset.name;
-
-      const token = document.createElement('span');
-      token.className = 'image-token';
-      token.textContent = imageToken(index + 1);
-      token.title = 'Cole esse token no texto pra posicionar a imagem';
-
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'remove-field';
-      removeBtn.textContent = '✕';
-      removeBtn.title = 'Remover imagem';
-      removeBtn.addEventListener('click', () => {
-        imgs.assets = imgs.assets.filter((a) => a.id !== asset.id);
-        renderImages();
-      });
-
-      item.append(thumb, token, removeBtn);
-      imgs.container.appendChild(item);
-    });
-  }
-
-  if (config.images) {
-    const imgs = config.images;
-    imgs.addBtn.addEventListener('click', () => imgs.fileInput.click());
-    imgs.fileInput.addEventListener('change', async () => {
-      const files = Array.from(imgs.fileInput.files ?? []);
-      for (const file of files) {
-        const dataUrl = await fileToDataUrl(file);
-        imgs.assets.push({ id: newImageId(), name: file.name, dataUrl });
-      }
-      imgs.fileInput.value = '';
-      renderImages();
-    });
-  }
-
   config.btnFormat.addEventListener('click', () => {
     const useSignatureTemplate = config.signatureCheckbox?.checked ?? false;
     const sourceText = useSignatureTemplate ? stripSignatureBlock(config.input.value) : config.input.value;
 
     const result = formatProspecto(sourceText, rules);
     let html = result.html;
-    if (config.images) {
-      html = applyImages(html, config.images.assets, config.images.placement);
-    }
     if (useSignatureTemplate) {
       html = `${html}\n\n${SIGNATURE_BLOCK_HTML}`;
     }
@@ -205,13 +149,6 @@ setupSection({
   btnCopy: byId('btn-copy-cabecalho'),
   copyFeedback: byId('copy-feedback-cabecalho'),
   unmappedWarning: byId('unmapped-warning-cabecalho'),
-  images: {
-    container: byId('images-cabecalho'),
-    fileInput: byId('input-image-cabecalho'),
-    addBtn: byId('btn-add-image-cabecalho'),
-    placement: 'before',
-    assets: [],
-  },
 });
 
 setupSection({
@@ -222,13 +159,6 @@ setupSection({
   btnCopy: byId('btn-copy-rodape'),
   copyFeedback: byId('copy-feedback-rodape'),
   unmappedWarning: byId('unmapped-warning-rodape'),
-  images: {
-    container: byId('images-rodape'),
-    fileInput: byId('input-image-rodape'),
-    addBtn: byId('btn-add-image-rodape'),
-    placement: 'after',
-    assets: [],
-  },
 });
 
 // ---------- CSS (extra) ----------

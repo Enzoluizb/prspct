@@ -8,21 +8,16 @@
   </head>
   <body>
     <div class="topbar">
-      <div class="topbar-brand">
-        <span class="brand-mark">P</span>
-        <span class="brand-name">PROSPECTO</span>
+      <div class="topbar-title">
+        <span class="topbar-title-item">Texto Prospecto</span>
+        <span class="topbar-title-sep">•</span>
+        <span class="topbar-title-item muted">Formatador para o Prisma</span>
       </div>
       <label class="theme-toggle" for="theme-switch">
         <span class="theme-toggle-label">Modo escuro</span>
         <input type="checkbox" id="theme-switch" />
         <span class="theme-toggle-track"><span class="theme-toggle-thumb"></span></span>
       </label>
-    </div>
-
-    <div class="breadcrumb">
-      <span class="breadcrumb-item">Texto Prospecto</span>
-      <span class="breadcrumb-sep">•</span>
-      <span class="breadcrumb-item muted">Formatador para o Prisma</span>
     </div>
 
     <nav class="tabs" role="tablist">
@@ -90,18 +85,6 @@
             <label for="input-text-cabecalho">Texto do cabeçalho (opcional)</label>
             <textarea id="input-text-cabecalho" placeholder="Texto fixo do cabeçalho, se houver..."></textarea>
 
-            <div class="image-uploader">
-              <label>Imagens (opcional)</label>
-              <input type="file" id="input-image-cabecalho" accept="image/*" multiple class="hidden" />
-              <button type="button" class="secondary small-btn" id="btn-add-image-cabecalho">+ Adicionar imagem</button>
-              <p class="help-text">
-                Use <code>{IMAGEM_1}</code>, <code>{IMAGEM_2}</code>... no texto acima pra
-                escolher onde cada imagem entra. Imagem sem token entra automaticamente no
-                topo do cabeçalho.
-              </p>
-              <div id="images-cabecalho" class="images-list"></div>
-            </div>
-
             <button id="btn-format-cabecalho" class="primary">Formatar cabeçalho</button>
             <div id="unmapped-warning-cabecalho" class="warning hidden"></div>
           </div>
@@ -126,18 +109,6 @@
           <div class="column">
             <label for="input-text-rodape">Texto do rodapé (opcional)</label>
             <textarea id="input-text-rodape" placeholder="Bloco de assinatura, testemunhas, etc..."></textarea>
-
-            <div class="image-uploader">
-              <label>Imagens (opcional)</label>
-              <input type="file" id="input-image-rodape" accept="image/*" multiple class="hidden" />
-              <button type="button" class="secondary small-btn" id="btn-add-image-rodape">+ Adicionar imagem</button>
-              <p class="help-text">
-                Use <code>{IMAGEM_1}</code>, <code>{IMAGEM_2}</code>... no texto acima pra
-                escolher onde cada imagem entra. Imagem sem token entra automaticamente no
-                final do rodapé.
-              </p>
-              <div id="images-rodape" class="images-list"></div>
-            </div>
 
             <button id="btn-format-rodape" class="primary">Formatar rodapé</button>
             <div id="unmapped-warning-rodape" class="warning hidden"></div>

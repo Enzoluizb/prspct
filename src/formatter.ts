@@ -135,6 +135,157 @@ function renderNumberedOrPlain(raw: string, boldWords: string[], dynamicSubs: Ma
   return `<strong>${escapeHtml(num)}</strong>${sep}${applyBoldAndSubstitutions(rest, boldWords, dynamicSubs)}`;
 }
 
+// Uma "linha de tabela" é uma linha de quadro (tipo "Quadro-Resumo") colada
+// direto do Word: cada célula vira um pedaço separado por tabulação quando
+// colada como texto puro. Linha de texto corrido normal não tem tab no meio.
+// O Word também usa tabulação só pra alinhar campos "Rótulo: valor" lado a
+// lado (ex: "CPF:\t000.000.000-00\tRG:\t99 99 999-99") — isso NÃO é uma
+// tabela, é o formato normal de campo, só que com tab no lugar de espaços.
+// O que diferencia os dois é a célula de RÓTULO (a 1ª, 3ª, 5ª... célula, pulando
+// de 2 em 2): no quadro-resumo ela nunca termina em ":" (ex: "Horário de
+// acesso"); no campo normal, sempre termina (ex: "CPF:"). Só olhar a célula de
+// rótulo evita confundir com um ":" que apareça por acaso dentro do VALOR (ex:
+// "Segunda a sexta: 07h00m às 19h00m" é só o valor, não vira dois campos).
+function isTableRowLine(line: string): boolean {
+  if (!line.includes('\t')) return false;
+  const cells = line.split('\t').map((c) => c.trim());
+  for (let i = 0; i < cells.length; i += 2) {
+    if (cells[i].endsWith(':')) return false;
+  }
+  return true;
+}
+
+// Divide o texto colado em trechos "tabela" (linhas com tab, mais as barras
+// de título em caixa alta coladas nelas, tipo "A. LOCADORA") e "normal" (todo
+// o resto), pra cada um ser formatado do jeito certo. Isso permite colar um
+// texto que tem um quadro-resumo em tabela E cláusulas normais no mesmo lugar.
+function splitIntoSegments(rawLines: string[]): { type: 'table' | 'normal'; lines: string[] }[] {
+  const n = rawLines.length;
+  const marked = new Array<boolean>(n).fill(false);
+
+  for (let i = 0; i < n; i++) {
+    if (isTableRowLine(rawLines[i])) marked[i] = true;
+  }
+
+  // barra de título (sem tab) colada direto numa linha de tabela também entra
+  for (let i = 0; i < n; i++) {
+    if (marked[i]) continue;
+    const trimmed = rawLines[i].trim();
+    if (!trimmed || !isHeadingLine(trimmed)) continue;
+    const prevMarked = i > 0 && marked[i - 1];
+    const nextMarked = i + 1 < n && marked[i + 1];
+    if (prevMarked || nextMarked) marked[i] = true;
+  }
+
+  // linha em branco cercada de tabela dos dois lados também entra (não quebra o quadro)
+  for (let i = 0; i < n; i++) {
+    if (marked[i] || rawLines[i].trim() !== '') continue;
+    let before = i - 1;
+    while (before >= 0 && rawLines[before].trim() === '' && !marked[before]) before--;
+    let after = i + 1;
+    while (after < n && rawLines[after].trim() === '' && !marked[after]) after++;
+    if (before >= 0 && marked[before] && after < n && marked[after]) marked[i] = true;
+  }
+
+  // uma tabela de verdade tem pelo menos 2 linhas com tab — uma linha isolada
+  // com um tab perdido (ex: apertou Tab sem querer no Word depois de uma
+  // palavra solta) não deve virar uma "tabela" de uma linha só.
+  for (let i = 0; i < n; ) {
+    if (!marked[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < n && marked[j]) j++;
+    const tabLineCount = rawLines.slice(i, j).filter((l) => l.includes('\t')).length;
+    if (tabLineCount < 2) {
+      for (let k = i; k < j; k++) marked[k] = false;
+    }
+    i = j;
+  }
+
+  const segments: { type: 'table' | 'normal'; lines: string[] }[] = [];
+  let current: string[] = [];
+  let currentType: 'table' | 'normal' | null = null;
+
+  for (let i = 0; i < n; i++) {
+    const type: 'table' | 'normal' = marked[i] ? 'table' : 'normal';
+    if (currentType !== null && type !== currentType) {
+      segments.push({ type: currentType, lines: current });
+      current = [];
+    }
+    currentType = type;
+    current.push(rawLines[i]);
+  }
+  if (currentType !== null) segments.push({ type: currentType, lines: current });
+
+  return segments;
+}
+
+// Renderiza um trecho "tabela": cada barra de título (sem tab) vira uma linha
+// de cabeçalho preta ocupando a largura toda; cada linha com tab vira uma
+// linha de células rótulo/valor (aos pares), usando o mesmo mapeamento de
+// coringas e o mesmo aviso de "não cadastrado" que o resto do formatador.
+function renderTableSegment(
+  lines: string[],
+  config: RulesConfig,
+  dynamicSubs: Map<string, string>,
+  unmapped: Set<string>,
+): string {
+  const rowLines = lines.filter((l) => l.trim() !== '');
+  if (rowLines.length === 0) return '';
+
+  const maxCols = rowLines.reduce((max, l) => (l.includes('\t') ? Math.max(max, l.split('\t').length) : max), 2);
+
+  let headingHint = '';
+  const rowsHtml: string[] = [];
+
+  for (const line of rowLines) {
+    if (!line.includes('\t')) {
+      headingHint = line.trim();
+      rowsHtml.push(
+        `<tr><td colspan="${maxCols}" style="background: #000000; color: #ffffff; padding: 4px 6px;"><strong>${escapeHtml(headingHint)}</strong></td></tr>`,
+      );
+      continue;
+    }
+
+    const cells = line.split('\t').map((c) => c.trim());
+    const cellsHtml: string[] = [];
+    for (let i = 0; i < cells.length; i += 2) {
+      const label = cells[i] ?? '';
+      const value = cells[i + 1] ?? '';
+      if (!label) {
+        cellsHtml.push('<td>&nbsp;</td><td>&nbsp;</td>');
+        continue;
+      }
+      const template = findCoringa(config, label, headingHint);
+      let valueHtml: string;
+      if (template === undefined) {
+        unmapped.add(label);
+        valueHtml = escapeHtml(value);
+      } else {
+        valueHtml = escapeHtml(template);
+        if (value && value.length >= 3 && !value.includes('{')) {
+          dynamicSubs.set(value, template);
+        }
+      }
+      // se essa linha tem menos pares rótulo/valor que o máximo da tabela (ex:
+      // "Atraso" sozinho numa linha de tabela com 4 colunas), o valor estica
+      // até o fim pra não deixar um buraco vazio sem borda à direita.
+      const isLastPair = i + 2 >= cells.length;
+      const remainingCols = isLastPair ? maxCols - cells.length : 0;
+      const valueColspanAttr = remainingCols > 0 ? ` colspan="${1 + remainingCols}"` : '';
+      cellsHtml.push(`<td><strong>${escapeHtml(label)}</strong></td><td${valueColspanAttr}>${valueHtml}</td>`);
+    }
+    rowsHtml.push(`<tr>${cellsHtml.join('')}</tr>`);
+  }
+
+  return (
+    `<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse;">\n` +
+    `<tbody>\n${rowsHtml.join('\n')}\n</tbody>\n</table>`
+  );
+}
+
 type LineKind = 'heading' | 'field' | 'prose';
 
 interface ParsedLine {
@@ -144,10 +295,17 @@ interface ParsedLine {
   index: number;
 }
 
-export function formatProspecto(rawText: string, config: RulesConfig): FormatResult {
-  const rawLines = rawText.replace(/\r\n/g, '\n').replace(/\t/g, '  ').split('\n');
-  const unmapped = new Set<string>();
-  const dynamicSubs = new Map<string, string>(); // valor literal encontrado -> coringa
+// Formata um trecho de texto corrido (sem linhas de tabela) — é o parser
+// original: títulos, campos "Rótulo: valor", parágrafos numerados etc.
+// dynamicSubs/unmapped são compartilhados entre todos os trechos do texto
+// colado, pra uma troca descoberta num trecho valer pro resto do documento.
+function formatNormalSegment(
+  rawText: string,
+  config: RulesConfig,
+  dynamicSubs: Map<string, string>,
+  unmapped: Set<string>,
+): string {
+  const rawLines = rawText.replace(/\t/g, '  ').split('\n');
 
   // ---------- passo 1: classifica cada linha ----------
   const parsed: ParsedLine[] = [];
@@ -170,17 +328,22 @@ export function formatProspecto(rawText: string, config: RulesConfig): FormatRes
   }
 
   // ---------- passo 2: campo com rótulo mas sem valor na própria linha (o Word
-  // quebrou o valor pra linha de baixo) "puxa" a próxima linha como valor ----------
+  // quebrou o valor pra linha de baixo, às vezes com uma linha em branco no
+  // meio por espaçamento) "puxa" a próxima linha como valor ----------
   for (let i = 0; i < parsed.length; i++) {
     const p = parsed[i];
     if (p.kind !== 'field' || p.fields.length !== 1) continue;
     const onlyField = p.fields[0];
     const hasValue = p.raw.slice(onlyField.valueStart).trim().length > 0;
     if (hasValue) continue;
-    const next = parsed[i + 1];
+
+    let j = i + 1;
+    if (parsed[j] && parsed[j].kind === 'prose' && !parsed[j].raw) j++; // pula no máximo 1 linha em branco
+
+    const next = parsed[j];
     if (next && next.kind === 'prose' && next.raw) {
       p.raw = `${p.raw} ${next.raw}`;
-      parsed[i + 1] = { kind: 'prose', raw: '', fields: [], index: next.index }; // vira linha em branco (consumida)
+      parsed[j] = { kind: 'prose', raw: '', fields: [], index: next.index }; // vira linha em branco (consumida)
     }
   }
 
@@ -311,6 +474,24 @@ export function formatProspecto(rawText: string, config: RulesConfig): FormatRes
     htmlParts.push(`<p style="text-align: justify;">${inner}</p>`);
   }
 
-  const html = htmlParts.join('\n\n');
-  return { html, unmappedFields: Array.from(unmapped) };
+  return htmlParts.join('\n\n');
+}
+
+export function formatProspecto(rawText: string, config: RulesConfig): FormatResult {
+  const rawLines = rawText.replace(/\r\n/g, '\n').split('\n');
+  const segments = splitIntoSegments(rawLines);
+
+  const unmapped = new Set<string>();
+  const dynamicSubs = new Map<string, string>(); // valor literal encontrado -> coringa
+  const htmlParts: string[] = [];
+
+  for (const segment of segments) {
+    const html =
+      segment.type === 'table'
+        ? renderTableSegment(segment.lines, config, dynamicSubs, unmapped)
+        : formatNormalSegment(segment.lines.join('\n'), config, dynamicSubs, unmapped);
+    if (html) htmlParts.push(html);
+  }
+
+  return { html: htmlParts.join('\n\n'), unmappedFields: Array.from(unmapped) };
 }
