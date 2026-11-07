@@ -1,7 +1,7 @@
 import './style.css';
 import { formatProspecto } from './formatter';
 import { loadRules, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
-import { SIGNATURE_BLOCK_HTML, stripSignatureBlock } from './signatureBlock';
+import { SIGNATURE_BLOCK_HTML, SIGNATURE_PLACEHOLDER, replaceSignatureBlock } from './signatureBlock';
 
 let rules: RulesConfig = loadRules();
 
@@ -101,12 +101,20 @@ function byId<T extends HTMLElement>(id: string): T {
 function setupSection(config: SectionConfig): void {
   config.btnFormat.addEventListener('click', () => {
     const useSignatureTemplate = config.signatureCheckbox?.checked ?? false;
-    const sourceText = useSignatureTemplate ? stripSignatureBlock(config.input.value) : config.input.value;
+    const withPlaceholder = useSignatureTemplate ? replaceSignatureBlock(config.input.value) : null;
+    const sourceText = withPlaceholder ?? config.input.value;
 
     const result = formatProspecto(sourceText, rules);
     let html = result.html;
     if (useSignatureTemplate) {
-      html = `${html}\n\n${SIGNATURE_BLOCK_HTML}`;
+      const placeholderParagraph = new RegExp(`<p[^>]*>\\s*(?:<strong>)?\\s*${SIGNATURE_PLACEHOLDER}\\s*(?:</strong>)?\\s*</p>`);
+      if (withPlaceholder !== null && placeholderParagraph.test(html)) {
+        // assinatura padrão entra onde estava a original (antes dos anexos)
+        html = html.replace(placeholderParagraph, () => SIGNATURE_BLOCK_HTML);
+      } else {
+        // não achou o bloco no texto: mantém o comportamento antigo (no fim)
+        html = `${html}\n\n${SIGNATURE_BLOCK_HTML}`;
+      }
     }
     config.outputHtml.value = html;
     config.outputPreview.innerHTML = html;

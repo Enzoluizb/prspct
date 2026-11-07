@@ -116,17 +116,34 @@ export const SIGNATURE_BLOCK_HTML = `<p>{CIDADE_UNIDADE},&nbsp;{DT_INICIO_CONTRA
 
 <p>{ADENDOS_CONTRATO}</p>`;
 
-// O bloco de assinatura que o cliente manda por e-mail sempre começa numa linha
-// "LOCADORA:" sozinha (o texto digitado que viria antes, tipo "1. DADOS DA
-// LOCADORA:", tem algo antes de "LOCADORA" na linha, então não cai aqui).
-const SIGNATURE_START_REGEX = /^LOCADORA\s*:/i;
+// Marcador que ocupa o lugar do bloco de assinatura original no texto colado;
+// depois de formatar, é trocado pelo SIGNATURE_BLOCK_HTML (ver main.ts).
+export const SIGNATURE_PLACEHOLDER = '@@ASSINATURA_PADRAO@@';
 
-// Corta o texto colado a partir da linha de assinatura (inclusive), pra não
-// formatar esse trecho junto com o resto — ele vai ser substituído pelo
-// SIGNATURE_BLOCK_HTML. Se não achar o padrão, devolve o texto como veio.
-export function stripSignatureBlock(rawText: string): string {
+// O bloco de assinatura que o cliente manda começa numa linha "LOCADORA:" ou
+// "LOCADORA - NOME" sozinha (o texto digitado que viria antes, tipo "1. DADOS
+// DA LOCADORA:", tem algo antes de "LOCADORA" na linha, então não cai aqui).
+const SIGNATURE_START_REGEX = /^LOCADORA\s*(?::|[-–—]\s*\S)/i;
+// Cada anexo tem a sua própria assinatura, então o bloco principal termina
+// onde começa o primeiro anexo.
+const ANNEX_START_REGEX = /^ANEXO\s+(?:[IVXLC]+|\d+)\b/i;
+const SIGNATURE_LINE_REGEX = /^[_\-–—\s]{5,}$/;
+
+// Troca o trecho de assinatura/testemunhas (da linha "LOCADORA..." até logo
+// antes do primeiro "ANEXO ...", ou até o fim se não houver anexos) por um
+// marcador, pra o bloco padrão entrar NO MESMO LUGAR. Devolve null se não
+// achou o bloco.
+export function replaceSignatureBlock(rawText: string): string | null {
   const lines = rawText.replace(/\r\n/g, '\n').split('\n');
-  const cutIndex = lines.findIndex((line) => SIGNATURE_START_REGEX.test(line.trim()));
-  if (cutIndex === -1) return rawText;
-  return lines.slice(0, cutIndex).join('\n');
+  let start = lines.findIndex((line) => SIGNATURE_START_REGEX.test(line.trim()));
+  if (start === -1) return null;
+  // a linha de traços (___) logo acima de "LOCADORA" faz parte da assinatura
+  let k = start - 1;
+  while (k >= 0 && lines[k].trim() === '') k--;
+  if (k >= 0 && SIGNATURE_LINE_REGEX.test(lines[k])) start = k;
+
+  let end = lines.findIndex((line, i) => i > start && ANNEX_START_REGEX.test(line.trim()));
+  if (end === -1) end = lines.length;
+
+  return [...lines.slice(0, start), '', SIGNATURE_PLACEHOLDER, '', ...lines.slice(end)].join('\n');
 }

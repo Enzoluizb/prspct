@@ -85,14 +85,20 @@ function escapeRegExp(text: string): string {
 
 // Aplica a lista de "negritar sempre" + as trocas dinamicas (valor literal -> coringa,
 // detectadas nos campos "Rótulo: valor" e propagadas pro resto do texto) num pedaço
-// de texto livre (que ainda NAO foi escapado pra HTML). Comparação ignora
-// maiúsculas/minúsculas (ex: cadastra "Guarde Safe Self Storage" e também pega
-// "GUARDE SAFE SELF STORAGE" em caixa alta no meio das cláusulas).
+// de texto livre (que ainda NAO foi escapado pra HTML).
+// - Trocas dinâmicas (dynamicSubs) ignoram maiúsculas/minúsculas de propósito
+//   (ex: cadastra "Guarde Safe Self Storage" e também pega "GUARDE SAFE SELF
+//   STORAGE" em caixa alta no meio das cláusulas).
+// - "Negritar sempre" (boldWords) é EXATO: cadastrar "BOX" não deve negritar
+//   "Box" nem o "Box" dentro de "Boxes" — só a palavra exatamente como foi
+//   cadastrada.
 function applyBoldAndSubstitutions(text: string, boldWords: string[], dynamicSubs: Map<string, string>): string {
   // termo mais longo primeiro, pra um termo curto não "comer" parte de um termo longo
   const terms = [
-    ...Array.from(dynamicSubs.entries()).map(([t, replacement]) => ({ text: t, replacement })),
-    ...boldWords.filter((w) => w.trim()).map((w) => ({ text: w, replacement: null as string | null })),
+    ...Array.from(dynamicSubs.entries()).map(([t, replacement]) => ({ text: t, replacement, caseSensitive: false })),
+    ...boldWords
+      .filter((w) => w.trim())
+      .map((w) => ({ text: w, replacement: null as string | null, caseSensitive: true })),
   ]
     .filter((t) => t.text)
     .sort((a, b) => b.text.length - a.text.length);
@@ -106,9 +112,14 @@ function applyBoldAndSubstitutions(text: string, boldWords: string[], dynamicSub
   for (const m of text.matchAll(regex)) {
     const matched = m[0];
     const term = terms.find((t) => t.text.toLowerCase() === matched.toLowerCase());
-    const shown = term?.replacement ?? matched;
+    const applies = term !== undefined && (!term.caseSensitive || term.text === matched);
     result += escapeHtml(text.slice(lastIndex, m.index ?? 0));
-    result += `<strong>${escapeHtml(shown)}</strong>`;
+    if (applies) {
+      const shown = term!.replacement ?? matched;
+      result += `<strong>${escapeHtml(shown)}</strong>`;
+    } else {
+      result += escapeHtml(matched);
+    }
     lastIndex = (m.index ?? 0) + matched.length;
   }
   result += escapeHtml(text.slice(lastIndex));
@@ -142,15 +153,23 @@ function renderNumberedOrPlain(raw: string, boldWords: string[], dynamicSubs: Ma
 // lado (ex: "CPF:\t000.000.000-00\tRG:\t99 99 999-99") — isso NÃO é uma
 // tabela, é o formato normal de campo, só que com tab no lugar de espaços.
 // O que diferencia os dois é a célula de RÓTULO (a 1ª, 3ª, 5ª... célula, pulando
-// de 2 em 2): no quadro-resumo ela nunca termina em ":" (ex: "Horário de
-// acesso"); no campo normal, sempre termina (ex: "CPF:"). Só olhar a célula de
-// rótulo evita confundir com um ":" que apareça por acaso dentro do VALOR (ex:
-// "Segunda a sexta: 07h00m às 19h00m" é só o valor, não vira dois campos).
+// de 2 em 2): no quadro-resumo ela nunca tem um "Rótulo:" no começo (ex:
+// "Horário de acesso"); no campo normal, sempre começa assim (ex: "CPF:" ou,
+// se sobrou um tab solto no fim da linha, "Contratante: JOAO DA SILVA" inteiro
+// numa célula só). Checar o INÍCIO da célula (não se ela termina em ":") cobre
+// os dois casos. E olhar só a célula de rótulo evita confundir com um ":" que
+// apareça por acaso dentro do VALOR (ex: "Segunda a sexta: 07h00m às 19h00m").
+const FIELD_LABEL_PREFIX_REGEX = /^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ0-9°º/.() -]{0,40}?:/;
+
+const BULLET_CHARS = '•·▪●○◦■□▫‣⁃';
+
 function isTableRowLine(line: string): boolean {
   if (!line.includes('\t')) return false;
   const cells = line.split('\t').map((c) => c.trim());
+  // lista com marcador ("•\ttexto") é item de lista, não célula de tabela
+  if (cells[0].length === 1 && BULLET_CHARS.includes(cells[0])) return false;
   for (let i = 0; i < cells.length; i += 2) {
-    if (cells[i].endsWith(':')) return false;
+    if (FIELD_LABEL_PREFIX_REGEX.test(cells[i])) return false;
   }
   return true;
 }
@@ -171,7 +190,7 @@ function splitIntoSegments(rawLines: string[]): { type: 'table' | 'normal'; line
   for (let i = 0; i < n; i++) {
     if (marked[i]) continue;
     const trimmed = rawLines[i].trim();
-    if (!trimmed || !isHeadingLine(trimmed)) continue;
+    if (!trimmed || trimmed.endsWith(':') || !isHeadingLine(trimmed)) continue;
     const prevMarked = i > 0 && marked[i - 1];
     const nextMarked = i + 1 < n && marked[i + 1];
     if (prevMarked || nextMarked) marked[i] = true;
@@ -237,12 +256,52 @@ function renderTableSegment(
 
   const maxCols = rowLines.reduce((max, l) => (l.includes('\t') ? Math.max(max, l.split('\t').length) : max), 2);
 
+  // Tabela comum (ex: anexos "Item | Estado | Observações"): não é quadro de
+  // rótulo/valor em pares. Se não achou nenhum rótulo com coringa nas células
+  // de rótulo e tem 3+ colunas (ou número ímpar de colunas), renderiza como
+  // grade simples, uma <td> por célula, sem inventar coluna extra.
+  const tabRows = rowLines.filter((l) => l.includes('\t'));
+  const hasCoringaLabel = tabRows.some((l) =>
+    l
+      .split('\t')
+      .filter((_, i) => i % 2 === 0)
+      .some((c) => c.trim() && findCoringa(config, c.trim(), '') !== undefined),
+  );
+  if (maxCols >= 3 && (maxCols % 2 === 1 || !hasCoringaLabel)) {
+    const gridRows = rowLines.map((line, idx) => {
+      if (!line.includes('\t')) {
+        return `<tr><td colspan="${maxCols}"><strong>${escapeHtml(line.trim())}</strong></td></tr>`;
+      }
+      const cells = line.split('\t').map((c) => c.trim());
+      while (cells.length < maxCols) cells.push('');
+      const isHeader = idx === rowLines.findIndex((l) => l.includes('\t'));
+      const tds = cells
+        .map((c) => {
+          const inner = c ? escapeHtml(c) : '&nbsp;';
+          return `<td>${isHeader || (c && cells[0] === c) ? `<strong>${inner}</strong>` : inner}</td>`;
+        })
+        .join('');
+      return `<tr>${tds}</tr>`;
+    });
+    return (
+      `<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse;">\n` +
+      `<tbody>\n${gridRows.join('\n')}\n</tbody>\n</table>`
+    );
+  }
+
   let headingHint = '';
+  let titleHtml = '';
   const rowsHtml: string[] = [];
 
   for (const line of rowLines) {
     if (!line.includes('\t')) {
       headingHint = line.trim();
+      // título logo na 1ª linha (ex: "QUADRO-RESUMO DA CONTRATAÇÃO") fica como
+      // título normal acima da tabela; só as barras do meio ficam pretas.
+      if (rowsHtml.length === 0) {
+        titleHtml += `<p style="text-align: justify;"><strong>${escapeHtml(headingHint)}</strong></p>\n`;
+        continue;
+      }
       rowsHtml.push(
         `<tr><td colspan="${maxCols}" style="background: #000000; color: #ffffff; padding: 4px 6px;"><strong>${escapeHtml(headingHint)}</strong></td></tr>`,
       );
@@ -250,6 +309,7 @@ function renderTableSegment(
     }
 
     const cells = line.split('\t').map((c) => c.trim());
+    while (cells.length > 2 && cells[cells.length - 1] === '') cells.pop(); // tab solto no fim
     const cellsHtml: string[] = [];
     for (let i = 0; i < cells.length; i += 2) {
       const label = cells[i] ?? '';
@@ -281,6 +341,7 @@ function renderTableSegment(
   }
 
   return (
+    titleHtml +
     `<table border="1" cellpadding="6" cellspacing="0" style="width: 100%; border-collapse: collapse;">\n` +
     `<tbody>\n${rowsHtml.join('\n')}\n</tbody>\n</table>`
   );
@@ -304,6 +365,7 @@ function formatNormalSegment(
   config: RulesConfig,
   dynamicSubs: Map<string, string>,
   unmapped: Set<string>,
+  isFirstSegment: boolean,
 ): string {
   const rawLines = rawText.replace(/\t/g, '  ').split('\n');
 
@@ -401,7 +463,8 @@ function formatNormalSegment(
   const blocks: Block[] = [];
   let current: ParsedLine[] = [];
   let proseLines: ParsedLine[] = [];
-  const CLAUSE_START_REGEX = /^\d+(?:\.\d+)*\.?\s/;
+  // início de cláusula numerada ("3.2.") ou de item de lista ("•") = parágrafo novo
+  const CLAUSE_START_REGEX = new RegExp(`^(?:\\d+(?:\\.\\d+)*\\.?\\s|[${BULLET_CHARS}]\\s)`);
 
   function flush(): void {
     if (current.length > 0) blocks.push({ lines: current });
@@ -443,7 +506,10 @@ function formatNormalSegment(
     const hasField = block.lines.some((l) => l.kind === 'field');
 
     if (block.merge) {
-      const joined = block.lines.map((l) => l.raw.trim()).join(' ');
+      const joined = block.lines
+        .map((l) => l.raw.trim())
+        .join(' ')
+        .replace(new RegExp(`^([${BULLET_CHARS}])\\s+`), '$1 '); // "•  texto" -> "• texto"
       const content = renderNumberedOrPlain(joined, config.boldWords, dynamicSubs);
       htmlParts.push(`<p style="text-align: justify;">${content}</p>`);
       continue;
@@ -458,9 +524,17 @@ function formatNormalSegment(
     }
 
     if (!hasField) {
-      // só títulos (ex: "CLAUSULA PRIMEIRA" + "DO OBJETO"): centraliza
+      // só títulos (ex: "CLAUSULA PRIMEIRA" + "DO OBJETO"). Só centraliza
+      // quando é o PRIMEIRO bloco do texto colado — ali é o título do
+      // documento (ex: "CONTRATO DE LOCAÇÃO..." / "QUADRO-RESUMO"), que no
+      // Word fica centralizado de verdade. Título de cláusula no meio do
+      // texto (ex: "CLÁUSULA DÉCIMA SEGUNDA" / "SOLIDARIEDADE") segue o
+      // fluxo normal, só em negrito — centralizar todo título solto gerava
+      // falso positivo nesses casos.
+      const isDocumentTitle = isFirstSegment && htmlParts.length === 0;
+      const align = isDocumentTitle ? 'center' : 'justify';
       const inner = block.lines.map((l) => `<strong>${escapeHtml(l.raw)}</strong>`).join('<br />\n');
-      htmlParts.push(`<p style="text-align: center;">${inner}</p>`);
+      htmlParts.push(`<p style="text-align: ${align};">${inner}</p>`);
       continue;
     }
 
@@ -485,13 +559,13 @@ export function formatProspecto(rawText: string, config: RulesConfig): FormatRes
   const dynamicSubs = new Map<string, string>(); // valor literal encontrado -> coringa
   const htmlParts: string[] = [];
 
-  for (const segment of segments) {
+  segments.forEach((segment, i) => {
     const html =
       segment.type === 'table'
         ? renderTableSegment(segment.lines, config, dynamicSubs, unmapped)
-        : formatNormalSegment(segment.lines.join('\n'), config, dynamicSubs, unmapped);
+        : formatNormalSegment(segment.lines.join('\n'), config, dynamicSubs, unmapped, i === 0);
     if (html) htmlParts.push(html);
-  }
+  });
 
   return { html: htmlParts.join('\n\n'), unmappedFields: Array.from(unmapped) };
 }
