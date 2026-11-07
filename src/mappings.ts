@@ -22,7 +22,12 @@ export interface RulesConfig {
   boldWords: string[];
   // CSS personalizado opcional, reaproveitado entre contratos (aba "CSS").
   customCss: string;
+  // versão das regras de fábrica já incorporadas (ver mergeNewDefaults)
+  defaultsVersion?: number;
 }
+
+// Aumente este número sempre que adicionar coringas/negritos em DEFAULT_RULES.
+const DEFAULTS_VERSION = 2;
 
 let idCounter = 0;
 function id(): string {
@@ -73,6 +78,7 @@ export const DEFAULT_RULES: RulesConfig = {
     coringa('Valor da locação', '{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})', 'Locação (contrato)'),
     coringa('Desconto', '{PERC_FIXO_DESCONTO_CONTRATO}', 'Locação (contrato)'),
     coringa('Início da Locação', '{DT_INICIO_CONTRATO}', 'Locação (contrato)'),
+    coringa('Data de início', '{DT_INICIO_CONTRATO}', 'Locação (contrato)'),
     coringa('Término da Locação', '{DT_FIM_CONTRATO} {DT_VENCIMENTO_CONTRATO}', 'Locação (contrato)'),
     // texto padrão (boilerplate), igual em todo contrato — mantém sempre esse texto
     coringa(
@@ -85,9 +91,31 @@ export const DEFAULT_RULES: RulesConfig = {
   ],
   boldWords: ['LOCATÁRIO(A)', 'LOCADORA', 'BOX'],
   customCss: '',
+  defaultsVersion: DEFAULTS_VERSION,
 };
 
 const STORAGE_KEY = 'prospecto-formatter:rules-v3';
+
+function ruleKey(r: { label: string; group: string }): string {
+  return `${r.label.trim().toLowerCase()}|${r.group.trim().toLowerCase()}`;
+}
+
+// Traz pra regra salva no navegador os coringas/negritos padrão que foram
+// adicionados no código DEPOIS que ela foi salva (sem mexer no que a pessoa
+// já editou). Assim, melhoria nas regras de fábrica chega pra todo mundo
+// apenas publicando o site de novo.
+export function mergeNewDefaults(config: RulesConfig): RulesConfig {
+  if ((config.defaultsVersion ?? 0) >= DEFAULTS_VERSION) return config;
+  const existing = new Set(config.coringas.map(ruleKey));
+  for (const rule of DEFAULT_RULES.coringas) {
+    if (!existing.has(ruleKey(rule))) config.coringas.push({ ...rule, id: id() });
+  }
+  for (const word of DEFAULT_RULES.boldWords) {
+    if (!config.boldWords.includes(word)) config.boldWords.push(word);
+  }
+  config.defaultsVersion = DEFAULTS_VERSION;
+  return config;
+}
 
 export function loadRules(): RulesConfig {
   try {
@@ -98,7 +126,9 @@ export function loadRules(): RulesConfig {
       return structuredClone(DEFAULT_RULES);
     }
     if (typeof parsed.customCss !== 'string') parsed.customCss = '';
-    return parsed as RulesConfig;
+    const merged = mergeNewDefaults(parsed as RulesConfig);
+    saveRules(merged);
+    return merged;
   } catch {
     return structuredClone(DEFAULT_RULES);
   }

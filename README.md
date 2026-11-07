@@ -1,58 +1,67 @@
 # Formatador de Prospecto (Prisma)
 
 Ferramenta interna: cola o texto do contrato (vindo do Word), clica em **Formatar
-para o Prisma**, e recebe o HTML já com os rótulos em negrito e os campos do
-cliente trocados pelos coringas do sistema (`{NOME_CLIENTE}`, `{CPF_CNPJ_CLIENTE}`,
-etc.), pronto pra colar em **Código-Fonte** no editor de Texto do Prisma.
+para o Prisma**, e recebe o HTML já com rótulos em negrito e os dados do cliente,
+da unidade e do contrato trocados pelos coringas do sistema (`{NOME_CLIENTE}`,
+`{CPF_CNPJ_CLIENTE}`, `{BOXES_CONTRATO}`...), pronto pra colar em **Código-Fonte**
+no editor de Texto do Prisma.
 
 ## Rodar local
 
-Pré-requisito: [Node.js](https://nodejs.org) instalado (versão 18+).
+Pré-requisito: [Node.js](https://nodejs.org) 18+.
 
 ```bash
 npm install
-npm run dev
+npm run dev     # abre em http://localhost:5173
+npm test        # testes automatizados (vitest)
 ```
 
-Abre o endereço que aparecer no terminal (algo como `http://localhost:5173`).
+## Publicar (GitHub Pages)
 
-## Publicar no GitHub Pages
+O workflow `.github/workflows/deploy.yml` publica a cada `push` na `main` ou na
+`master`. No GitHub: **Settings → Pages → Source = "GitHub Actions"**. Link:
+`https://<usuario>.github.io/<repo>/`.
 
-1. Crie um repositório no GitHub e suba este projeto:
-   ```bash
-   git remote add origin <url-do-seu-repositorio>
-   git add .
-   git commit -m "Formatador de prospecto"
-   git push -u origin main
-   ```
-2. No GitHub: **Settings → Pages → Build and deployment → Source** = "GitHub Actions".
-3. O workflow em `.github/workflows/deploy.yml` já publica automaticamente a
-   cada `push` na branch `main`. O link fica em `https://<seu-usuario>.github.io/<repo>/`.
+## O que o formatador reconhece
 
-## Como funciona o mapeamento (aba "Coringas / Mapeamento")
+- **Campos `Rótulo: valor`** (um ou vários na mesma linha): rótulo em negrito e
+  valor trocado pelo coringa cadastrado na aba **Coringas**. O valor digitado
+  também é trocado em qualquer outro lugar do texto (ex: nome da unidade
+  repetido nas cláusulas). Rótulo repetido em grupos diferentes (ex: "E-mail" do
+  cliente e da unidade) é resolvido pelo título de seção mais próximo.
+- **Padrões de texto** (`src/patterns.ts`), pra contratos que não vêm em campos:
+  `Box nº [●]` → `{BOXES_CONTRATO}`, metragem → `{BOXES_M2}`,
+  `[nome/razão social...]` → `{NOME_CLIENTE}`, `CPF/CNPJ nº [●]`, `RG/IE nº [●]`,
+  endereço/e-mail/telefone `[●]`, `R$ [●] ([valor por extenso])` (valor mensal ou
+  valor declarado dos bens), `Data de entrega [●]`, `[Cidade/UF], [data]` (→ `{CIDADE_UNIDADE}, {DATA_ATUAL}`).
+- **Tabelas** coladas do Word (células separadas por tab): quadro-resumo
+  (rótulo/valor em pares; barras de título no meio ficam pretas) e tabelas
+  comuns de anexo (grade simples, cabeçalho em negrito).
+- **Listas** com `•`, `a)`, `(a)`, `i)`: um parágrafo por item (nunca tabela).
+- **Cláusulas numeradas** (`3.`, `3.1.`): número em negrito; título em caixa alta
+  fica todo em negrito.
+- **Testemunhas**: `Nome:` e `CPF:` sob "TESTEMUNHA" ficam só como rótulo.
+- **Assinatura padrão** (checkbox na aba Texto): o bloco de assinatura do
+  contrato (da linha `LOCADORA:` ou `LOCADORA - NOME` até o primeiro `ANEXO`) é
+  trocado pela assinatura padrão do Prisma, no mesmo lugar. Os anexos, cada um
+  com sua assinatura, ficam como estão. Sem bloco no texto, a assinatura vai pro fim.
 
-- O texto é lido linha por linha.
-- Uma linha **sozinha, em maiúsculas e sem `:`** (ex: `LOCATÁRIO`) é tratada
-  como título de seção.
-- Uma linha no formato `Rótulo: valor` (ex: `Nome: João da Silva`) é tratada
-  como campo: o rótulo sempre fica em negrito.
-  - Se esse rótulo, dentro da seção atual, tiver um **coringa cadastrado**
-    (ex: `{NOME_CLIENTE}`), o valor digitado é **substituído** pelo coringa.
-  - Se o coringa estiver **em branco**, o valor digitado é **mantido** como
-    está — use isso para dados fixos (ex: dados da própria empresa, que não
-    mudam de contrato pra contrato).
-  - Se o rótulo **não estiver cadastrado**, ele ainda fica em negrito, o valor
-    é mantido, e ele aparece num aviso na tela pra você saber que pode
-    cadastrar um coringa se for o caso.
-- Tudo isso é editável na aba **Coringas / Mapeamento**, sem precisar mexer em
-  código: dá pra adicionar seção, campo, coringa, remover, etc. Fica salvo no
-  navegador. Use **Exportar JSON** pra fazer backup ou repassar a configuração
-  pra outra pessoa (ela usa **Importar JSON**) — inclusive dá pra versionar
-  esse JSON no repositório se um dia quisermos que o mapeamento venha
-  "de fábrica" pra todo mundo.
+## Regras editáveis e backup
+
+Aba **Coringas**: coringas por rótulo e "negritar sempre", editáveis sem mexer
+em código e salvos neste navegador. **Exportar JSON** / **Importar JSON** serve
+de backup e pra passar a configuração pra outra pessoa.
+
+As regras "de fábrica" ficam em `src/mappings.ts` (`DEFAULT_RULES`). Quando o
+código ganha coringas novos (e `DEFAULTS_VERSION` sobe), eles são somados
+automaticamente às regras salvas de cada navegador, sem apagar o que a pessoa
+editou — basta publicar o site de novo.
 
 ## Estrutura
 
-- `src/formatter.ts` — lógica de formatação (texto → HTML).
-- `src/mappings.ts` — mapeamento padrão (rótulo → coringa) e persistência.
-- `src/main.ts` — interface (abas, editor de mapeamento, copiar HTML).
+- `src/formatter.ts` — texto → HTML (campos, tabelas, listas, cláusulas).
+- `src/patterns.ts` — coringas por padrão de texto.
+- `src/mappings.ts` — regras de fábrica e persistência.
+- `src/signatureBlock.ts` — assinatura padrão e substituição do bloco original.
+- `src/main.ts` — interface.
+- `tests/` — testes automatizados.

@@ -1,6 +1,6 @@
 import './style.css';
 import { formatProspecto } from './formatter';
-import { loadRules, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
+import { loadRules, mergeNewDefaults, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
 import { SIGNATURE_BLOCK_HTML, SIGNATURE_PLACEHOLDER, replaceSignatureBlock } from './signatureBlock';
 
 let rules: RulesConfig = loadRules();
@@ -351,7 +351,7 @@ importFile.addEventListener('change', async () => {
       throw new Error('formato inválido');
     }
     if (typeof parsed.customCss !== 'string') parsed.customCss = '';
-    rules = parsed as RulesConfig;
+    rules = mergeNewDefaults(parsed as RulesConfig);
     persist();
     renderRulesEditor();
   } catch (err) {

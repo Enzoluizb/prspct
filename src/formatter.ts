@@ -1,4 +1,5 @@
 import type { RulesConfig } from './mappings';
+import { splitByPatterns } from './patterns';
 
 export interface FormatResult {
   html: string;
@@ -93,6 +94,24 @@ function escapeRegExp(text: string): string {
 //   "Box" nem o "Box" dentro de "Boxes" — só a palavra exatamente como foi
 //   cadastrada.
 function applyBoldAndSubstitutions(text: string, boldWords: string[], dynamicSubs: Map<string, string>): string {
+  // primeiro os padrões de texto (ex: "Box nº [●]" -> coringa); o que virou
+  // coringa não passa pelas outras trocas (senão "BOX" dentro de {BOXES_...}
+  // seria negritado).
+  return splitByPatterns(text)
+    .map((piece) =>
+      piece.isCoringa ? escapeHtml(piece.text) : applyBoldCore(piece.text, boldWords, dynamicSubs),
+    )
+    .join('');
+}
+
+// Só os padrões de texto (sem negrito/trocas dinâmicas), pra células de tabela.
+function applyPatternsOnly(text: string): string {
+  return splitByPatterns(text)
+    .map((piece) => escapeHtml(piece.text))
+    .join('');
+}
+
+function applyBoldCore(text: string, boldWords: string[], dynamicSubs: Map<string, string>): string {
   // termo mais longo primeiro, pra um termo curto não "comer" parte de um termo longo
   const terms = [
     ...Array.from(dynamicSubs.entries()).map(([t, replacement]) => ({ text: t, replacement, caseSensitive: false })),
@@ -162,12 +181,15 @@ function renderNumberedOrPlain(raw: string, boldWords: string[], dynamicSubs: Ma
 const FIELD_LABEL_PREFIX_REGEX = /^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ0-9°º/.() -]{0,40}?:/;
 
 const BULLET_CHARS = '•·▪●○◦■□▫‣⁃';
+// marcadores de lista: "•", "a)", "(a)", "i)", "(ii)"
+const LIST_MARKER_SOURCE = `[${BULLET_CHARS}]|\\(?[a-zA-Z]\\)|\\(?(?:ii|iii|iv|vi|vii|viii|ix|x)\\)`;
+const LIST_MARKER_ALONE_REGEX = new RegExp(`^(?:${LIST_MARKER_SOURCE})$`);
 
 function isTableRowLine(line: string): boolean {
   if (!line.includes('\t')) return false;
   const cells = line.split('\t').map((c) => c.trim());
-  // lista com marcador ("•\ttexto") é item de lista, não célula de tabela
-  if (cells[0].length === 1 && BULLET_CHARS.includes(cells[0])) return false;
+  // lista com marcador ("•\ttexto", "a)\ttexto") é item de lista, não célula de tabela
+  if (LIST_MARKER_ALONE_REGEX.test(cells[0])) return false;
   for (let i = 0; i < cells.length; i += 2) {
     if (FIELD_LABEL_PREFIX_REGEX.test(cells[i])) return false;
   }
@@ -277,7 +299,7 @@ function renderTableSegment(
       const isHeader = idx === rowLines.findIndex((l) => l.includes('\t'));
       const tds = cells
         .map((c) => {
-          const inner = c ? escapeHtml(c) : '&nbsp;';
+          const inner = c ? applyPatternsOnly(c) : '&nbsp;';
           return `<td>${isHeader || (c && cells[0] === c) ? `<strong>${inner}</strong>` : inner}</td>`;
         })
         .join('');
@@ -322,7 +344,7 @@ function renderTableSegment(
       let valueHtml: string;
       if (template === undefined) {
         unmapped.add(label);
-        valueHtml = escapeHtml(value);
+        valueHtml = applyPatternsOnly(value);
       } else {
         valueHtml = escapeHtml(template);
         if (value && value.length >= 3 && !value.includes('{')) {
@@ -427,11 +449,15 @@ function formatNormalSegment(
     p.fields.forEach((field, i) => {
       const valueEnd = i + 1 < p.fields.length ? p.fields[i + 1].labelStart : p.raw.length;
       const originalValue = p.raw.slice(field.valueStart, valueEnd).trim();
-      const template = findCoringa(config, field.label, headingBefore[p.index] ?? '');
+      const heading = headingBefore[p.index] ?? '';
+      // testemunha não é o cliente: "Nome:"/"CPF:" ali ficam só como rótulo,
+      // sem coringa (e sem entrar no aviso de "campo sem coringa").
+      const isWitness = /testemunha/i.test(stripAccents(heading));
+      const template = isWitness ? undefined : findCoringa(config, field.label, heading);
 
       if (template === undefined) {
-        unmapped.add(field.label);
-        pieces.push(`<strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(originalValue)}`);
+        if (!isWitness) unmapped.add(field.label);
+        pieces.push(`<strong>${escapeHtml(field.label)}:</strong> ${applyPatternsOnly(originalValue)}`);
       } else {
         pieces.push(`<strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(template)}`);
         // registra o valor literal digitado pra ser trocado pelo coringa em qualquer
@@ -464,7 +490,7 @@ function formatNormalSegment(
   let current: ParsedLine[] = [];
   let proseLines: ParsedLine[] = [];
   // início de cláusula numerada ("3.2.") ou de item de lista ("•") = parágrafo novo
-  const CLAUSE_START_REGEX = new RegExp(`^(?:\\d+(?:\\.\\d+)*\\.?\\s|[${BULLET_CHARS}]\\s)`);
+  const CLAUSE_START_REGEX = new RegExp(`^(?:\\d+(?:\\.\\d+)*\\.?\\s|(?:${LIST_MARKER_SOURCE})\\s)`);
 
   function flush(): void {
     if (current.length > 0) blocks.push({ lines: current });
@@ -509,7 +535,7 @@ function formatNormalSegment(
       const joined = block.lines
         .map((l) => l.raw.trim())
         .join(' ')
-        .replace(new RegExp(`^([${BULLET_CHARS}])\\s+`), '$1 '); // "•  texto" -> "• texto"
+        .replace(new RegExp(`^(${LIST_MARKER_SOURCE})\\s+`), '$1 '); // "•  texto" -> "• texto"
       const content = renderNumberedOrPlain(joined, config.boldWords, dynamicSubs);
       htmlParts.push(`<p style="text-align: justify;">${content}</p>`);
       continue;
