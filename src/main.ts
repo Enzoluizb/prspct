@@ -1,6 +1,7 @@
 import './style.css';
 import { formatProspecto } from './formatter';
 import { loadRules, mergeNewDefaults, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
+import { extractSingleCellBoxes, wrapBoxes } from './pasteBoxes';
 import { SIGNATURE_BLOCK_HTML, SIGNATURE_PLACEHOLDER, replaceSignatureBlock } from './signatureBlock';
 
 let rules: RulesConfig = loadRules();
@@ -99,6 +100,19 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 function setupSection(config: SectionConfig): void {
+  // Colar do Word: tabelas de uma célula (caixas) só aparecem no HTML da área de
+  // transferência, então marcamos essas caixas no texto (ver pasteBoxes.ts).
+  config.input.addEventListener('paste', (e) => {
+    const html = e.clipboardData?.getData('text/html') ?? '';
+    const plain = e.clipboardData?.getData('text/plain') ?? '';
+    if (!html || !plain || !/<table/i.test(html)) return;
+    const boxes = extractSingleCellBoxes(html);
+    if (boxes.length === 0) return;
+    e.preventDefault();
+    const wrapped = wrapBoxes(plain, boxes);
+    config.input.setRangeText(wrapped, config.input.selectionStart, config.input.selectionEnd, 'end');
+  });
+
   config.btnFormat.addEventListener('click', () => {
     const useSignatureTemplate = config.signatureCheckbox?.checked ?? false;
     const withPlaceholder = useSignatureTemplate ? replaceSignatureBlock(config.input.value) : null;
@@ -146,8 +160,7 @@ setupSection({
   btnCopy: byId('btn-copy-texto'),
   copyFeedback: byId('copy-feedback-texto'),
   unmappedWarning: byId('unmapped-warning-texto'),
-  signatureCheckbox: byId<HTMLInputElement>('chk-signature-texto'),
-});
+  signatureCheckbox: byId<HTMLInputElement>('chk-signature-texto'),});
 
 setupSection({
   input: byId('input-text-cabecalho'),

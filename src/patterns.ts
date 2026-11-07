@@ -19,18 +19,59 @@ const PH = String.raw`\[\s*[●•○■]\s*\]`;
 const EXTENSO = String.raw`\(\s*\[?\s*(?:valor\s+)?(?:por\s+)?extenso\s*\]?\s*\)`;
 
 export const PATTERN_RULES: PatternRule[] = [
+  // O coringa de valor já inclui o "R$" (ex: {VALOR_TOTAL_CONTRATO} -> R$450,00),
+  // então o "R$" digitado entra no trecho trocado.
   // valor declarado dos bens vem ANTES do valor genérico (mesma posição de início)
   {
     name: 'valor declarado dos bens',
-    regex: new RegExp(String.raw`(valor\s+global\s+declarado\s+de\s+R\$\s*)(${PH}\s*${EXTENSO})`, 'gi'),
+    regex: new RegExp(String.raw`(valor\s+global\s+declarado\s+de\s+)(R\$\s*${PH}\s*${EXTENSO})`, 'gi'),
     coringa: '{VALOR_TOTAL_BENS_DECLARADOS} ({S_VALOR_TOTAL_BENS_DECLARADOS})',
   },
   {
-    name: 'valor mensal',
-    regex: new RegExp(String.raw`(R\$\s*)(${PH}\s*${EXTENSO})`, 'gi'),
+    name: 'valor mensal (placeholder)',
+    regex: new RegExp(String.raw`()(R\$\s*${PH}\s*${EXTENSO})`, 'gi'),
     coringa: '{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})',
   },
-  { name: 'box', regex: new RegExp(String.raw`(\bBox\s+n[º°o]\.?\s*)(${PH}|\d+[A-Za-z]?\b)`, 'gi'), coringa: '{BOXES_CONTRATO}' },
+  {
+    // contrato de exemplo com valor real: "O valor devido ... é de R$450,00 (Quatrocentos ...)"
+    // só nessa frase — outros valores (multas, taxas) NÃO viram coringa.
+    name: 'valor mensal (literal)',
+    regex: /(valor\s+devido[^.]{0,300}?\sé\s+de\s+)(R\$\s*[\d.]+,\d{2}\s*\([^)]*\))/gi,
+    coringa: '{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})',
+  },
+  {
+    name: 'número do contrato',
+    regex: /(\bN[º°o]\s+DO\s+CONTRATO\s*:?\s*)(\d+)/gi,
+    coringa: '{NUMERO_CONTRATO}',
+  },
+  {
+    name: 'plano do contrato',
+    regex: /(prazo\s+do\s+presente\s+contrato\s+ser[áa]\s+)(Mensal|Bimestral|Trimestral|Semestral|Anual|Quinzenal|Semanal|Di[áa]rio)\b/gi,
+    coringa: '{PLANO_CONTRATO}',
+  },
+  {
+    name: 'data de início do prazo',
+    regex: /(iniciando-se\s+no\s+dia\s+)(\d{2}\/\d{2}\/\d{4})/gi,
+    coringa: '{DT_INICIO_CONTRATO}',
+  },
+  {
+    name: 'data de término do prazo',
+    regex: /(t[ée]rmino\s+em\s+)(\d{2}\/\d{2}\/\d{4})/gi,
+    coringa: '{DT_FIM_CONTRATO}',
+  },
+  {
+    name: 'cnpj da contratada',
+    regex: /(inscrita\s+no\s+CNPJ\s*:?\s*)(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/gi,
+    coringa: '{CNPJ_UNIDADE}',
+  },
+  {
+    name: 'box',
+    regex: new RegExp(
+      String.raw`(\b(?:Box|CAIXA\s+DE)\s+n[º°o]\.?\s*)(${PH}|\d+[A-Za-z]?(?:\s*(?:,|e)\s*\d+[A-Za-z]?)*\b)`,
+      'gi',
+    ),
+    coringa: '{BOXES_CONTRATO}',
+  },
   {
     name: 'metragem',
     regex: new RegExp(String.raw`(\bmetragem(?:\s+aproximada)?:?\s*)(${PH}\s*m²|\d+(?:[.,]\d+)?\s*m²)`, 'gi'),

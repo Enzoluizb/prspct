@@ -30,6 +30,15 @@ function isHeadingLine(line: string): boolean {
   return hasLetter && !hasLowercase;
 }
 
+// Título com numeração romana ("IV. PRAZO CONTRATUAL", "XVII. Cláusula de
+// Responsabilidade...:"): curto, sem ponto final. Pega também os que misturam
+// maiúsculas e minúsculas, que isHeadingLine não pega.
+function isRomanHeadingLine(line: string): boolean {
+  const t = line.trim();
+  if (t.length > 100 || t.endsWith('.')) return false;
+  return /^[IVXLC]+\s*[.\-–—]\s*\S/.test(t);
+}
+
 // Um ou mais campos "Rótulo: valor" na mesma linha, ex:
 // "CPF:  000.000.000-00     RG: 99 99 999-99" -> dois campos.
 // Um novo rótulo só é reconhecido no início da linha ou depois de 2+ espaços
@@ -183,6 +192,7 @@ const FIELD_LABEL_PREFIX_REGEX = /^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ0-9°º/.() -]{0,40}?:/
 const BULLET_CHARS = '•·▪●○◦■□▫‣⁃';
 // marcadores de lista: "•", "a)", "(a)", "i)", "(ii)"
 const LIST_MARKER_SOURCE = `[${BULLET_CHARS}]|\\(?[a-zA-Z]\\)|\\(?(?:ii|iii|iv|vi|vii|viii|ix|x)\\)`;
+const CLAUSE_NUMBER_ALONE_REGEX = /^(?:\d+(?:\.\d+)*\.?|[IVXLC]+\.?)$/;
 const LIST_MARKER_ALONE_REGEX = new RegExp(`^(?:${LIST_MARKER_SOURCE})$`);
 
 function isTableRowLine(line: string): boolean {
@@ -190,6 +200,8 @@ function isTableRowLine(line: string): boolean {
   const cells = line.split('\t').map((c) => c.trim());
   // lista com marcador ("•\ttexto", "a)\ttexto") é item de lista, não célula de tabela
   if (LIST_MARKER_ALONE_REGEX.test(cells[0])) return false;
+  // "3.1<tab>texto" e "IV.<tab>TÍTULO": numeração de cláusula com tab, não tabela
+  if (CLAUSE_NUMBER_ALONE_REGEX.test(cells[0])) return false;
   for (let i = 0; i < cells.length; i += 2) {
     if (FIELD_LABEL_PREFIX_REGEX.test(cells[i])) return false;
   }
@@ -399,7 +411,7 @@ function formatNormalSegment(
       parsed.push({ kind: 'prose', raw: '', fields: [], index: i });
       continue;
     }
-    if (isHeadingLine(line)) {
+    if (isHeadingLine(line) || isRomanHeadingLine(line)) {
       parsed.push({ kind: 'heading', raw: line, fields: [], index: i });
       continue;
     }
@@ -577,21 +589,89 @@ function formatNormalSegment(
   return htmlParts.join('\n\n');
 }
 
+// Tabela "DESCONTO POR ANTECIPAÇÃO" (título + cabeçalho + valores): no sistema ela
+// é gerada pelo coringa {TABELA_DESCONTO_ANTECIPACAO}, então o texto colado é
+// trocado por ele.
+const DISCOUNT_TABLE_TOKEN = '@@TABELA_DESCONTO@@';
+
+function replaceDiscountTable(lines: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (/^DESCONTO\s+POR\s+ANTECIPA[ÇC][ÃA]O\s*:?$/i.test(lines[i].trim())) {
+      out.push('', DISCOUNT_TABLE_TOKEN, '');
+      i++;
+      while (i < lines.length && lines[i].trim() !== '') i++; // pula a tabela colada
+      continue;
+    }
+    out.push(lines[i]);
+  }
+  return out;
+}
+
+// Caixa (tabela de uma célula só no Word): ao colar, o texto vem entre as
+// linhas marcadoras BOX_START/BOX_END (ver pasteBoxes.ts) e sai como tabela de
+// uma célula com borda. Qualquer modelo que tenha essas caixas funciona; os
+// que não têm, não mudam.
+export const BOX_START = '[[CAIXA]]';
+export const BOX_END = '[[/CAIXA]]';
+
+type Chunk = { box: boolean; lines: string[] };
+
+function splitMarkedBoxes(lines: string[]): Chunk[] {
+  const chunks: Chunk[] = [];
+  let normal: string[] = [];
+  const flushNormal = () => {
+    if (normal.length > 0) chunks.push({ box: false, lines: normal });
+    normal = [];
+  };
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === BOX_START) {
+      flushNormal();
+      const box: string[] = [];
+      i++;
+      while (i < lines.length && lines[i].trim() !== BOX_END) {
+        box.push(lines[i]);
+        i++;
+      }
+      chunks.push({ box: true, lines: box });
+      continue;
+    }
+    normal.push(lines[i]);
+  }
+  flushNormal();
+  return chunks;
+}
+
 export function formatProspecto(rawText: string, config: RulesConfig): FormatResult {
-  const rawLines = rawText.replace(/\r\n/g, '\n').split('\n');
-  const segments = splitIntoSegments(rawLines);
+  const rawLines = replaceDiscountTable(rawText.replace(/\r\n/g, '\n').split('\n'));
+  const chunks: Chunk[] = splitMarkedBoxes(rawLines);
 
   const unmapped = new Set<string>();
   const dynamicSubs = new Map<string, string>(); // valor literal encontrado -> coringa
   const htmlParts: string[] = [];
 
-  segments.forEach((segment, i) => {
-    const html =
-      segment.type === 'table'
-        ? renderTableSegment(segment.lines, config, dynamicSubs, unmapped)
-        : formatNormalSegment(segment.lines.join('\n'), config, dynamicSubs, unmapped, i === 0);
-    if (html) htmlParts.push(html);
+  chunks.forEach((chunk, c) => {
+    if (chunk.box) {
+      const inner = formatNormalSegment(chunk.lines.join('\n'), config, dynamicSubs, unmapped, false);
+      htmlParts.push(
+        `<table align="center" border="1" cellpadding="1" cellspacing="1" style="width:100%;">\n<tbody>\n<tr>\n<td>${inner}</td>\n</tr>\n</tbody>\n</table>`,
+      );
+      return;
+    }
+    splitIntoSegments(chunk.lines).forEach((segment, i) => {
+      const html =
+        segment.type === 'table'
+          ? renderTableSegment(segment.lines, config, dynamicSubs, unmapped)
+          : formatNormalSegment(segment.lines.join('\n'), config, dynamicSubs, unmapped, c === 0 && i === 0);
+      if (html) htmlParts.push(html);
+    });
   });
 
-  return { html: htmlParts.join('\n\n'), unmappedFields: Array.from(unmapped) };
+  const discountParagraph = new RegExp(
+    `<p[^>]*>\\s*(?:<strong>)?\\s*${DISCOUNT_TABLE_TOKEN}\\s*(?:</strong>)?\\s*</p>`,
+  );
+  const html = htmlParts
+    .join('\n\n')
+    .replace(discountParagraph, '<p style="text-align: justify;">{TABELA_DESCONTO_ANTECIPACAO}</p>');
+  return { html, unmappedFields: Array.from(unmapped) };
 }

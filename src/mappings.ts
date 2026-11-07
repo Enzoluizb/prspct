@@ -27,7 +27,7 @@ export interface RulesConfig {
 }
 
 // Aumente este número sempre que adicionar coringas/negritos em DEFAULT_RULES.
-const DEFAULTS_VERSION = 2;
+const DEFAULTS_VERSION = 3;
 
 let idCounter = 0;
 function id(): string {
@@ -55,6 +55,9 @@ export const DEFAULT_RULES: RulesConfig = {
     coringa('Telefone1', '{TELEFONE1_CLIENTE}', 'Locatário (cliente)'),
     coringa('Telefone2', '{TELEFONE2_CLIENTE}', 'Locatário (cliente)'),
     coringa('E-mail', '{EMAIL_CLIENTE}', 'Locatário (cliente)'),
+    coringa('EMAIL', '{EMAIL_CLIENTE}', 'Locatário (cliente)'),
+    coringa('NOME / RAZÃO SOCIAL', '{NOME_CLIENTE}', 'Locatário (cliente)'),
+    coringa('CPF / CNPJ', '{CPF_CNPJ_CLIENTE}', 'Locatário (cliente)'),
     // estes 4 são um "chute" baseado no padrão dos outros coringas — confirme os
     // nomes certos no sistema e ajuste aqui se precisar:
     coringa('Bairro', '{BAIRRO_CLIENTE}', 'Locatário (cliente)'),
@@ -79,6 +82,8 @@ export const DEFAULT_RULES: RulesConfig = {
     coringa('Desconto', '{PERC_FIXO_DESCONTO_CONTRATO}', 'Locação (contrato)'),
     coringa('Início da Locação', '{DT_INICIO_CONTRATO}', 'Locação (contrato)'),
     coringa('Data de início', '{DT_INICIO_CONTRATO}', 'Locação (contrato)'),
+    coringa('Nº DO CONTRATO', '{NUMERO_CONTRATO}', 'Locação (contrato)'),
+    coringa('Contrato nº', '{NUMERO_CONTRATO}', 'Locação (contrato)'),
     coringa('Término da Locação', '{DT_FIM_CONTRATO} {DT_VENCIMENTO_CONTRATO}', 'Locação (contrato)'),
     // texto padrão (boilerplate), igual em todo contrato — mantém sempre esse texto
     coringa(

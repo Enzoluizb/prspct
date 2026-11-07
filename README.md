@@ -37,6 +37,11 @@ O workflow `.github/workflows/deploy.yml` publica a cada `push` na `main` ou na
 - **Tabelas** coladas do Word (células separadas por tab): quadro-resumo
   (rótulo/valor em pares; barras de título no meio ficam pretas) e tabelas
   comuns de anexo (grade simples, cabeçalho em negrito).
+- **Caixas** (tabela de uma célula só no Word, tipo CONTRATADA/CONTRATANTE): ao
+  colar, o formatador lê o HTML que o Word manda junto, acha essas tabelas e
+  marca o trecho no texto com `[[CAIXA]]` ... `[[/CAIXA]]`; elas saem como
+  tabela com borda. Sem tabela no Word, nada muda. Dá pra digitar os marcadores
+  na mão se precisar.
 - **Listas** com `•`, `a)`, `(a)`, `i)`: um parágrafo por item (nunca tabela).
 - **Cláusulas numeradas** (`3.`, `3.1.`): número em negrito; título em caixa alta
   fica todo em negrito.

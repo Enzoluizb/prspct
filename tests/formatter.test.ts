@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatProspecto } from '../src/formatter';
 import { DEFAULT_RULES } from '../src/mappings';
+import { wrapBoxes } from '../src/pasteBoxes';
 import { replaceSignatureBlock, SIGNATURE_PLACEHOLDER } from '../src/signatureBlock';
 
 const fmt = (text: string) => formatProspecto(text, DEFAULT_RULES).html;
@@ -91,7 +92,8 @@ describe('coringas por padrão de texto', () => {
     expect(html).toContain('{NOME_CLIENTE}');
     expect(html).toContain('{CPF_CNPJ_CLIENTE}');
     expect(html).toContain('{RG_CLIENTE}');
-    expect(html).toContain('R$ {VALOR_TOTAL_BENS_DECLARADOS} ({S_VALOR_TOTAL_BENS_DECLARADOS})');
+    expect(html).toContain('declarado de {VALOR_TOTAL_BENS_DECLARADOS} ({S_VALOR_TOTAL_BENS_DECLARADOS})');
+    expect(html).not.toContain('R$');
     expect(html).toContain('{BOXES_M2}');
   });
 
@@ -104,5 +106,125 @@ describe('coringas por padrão de texto', () => {
 
   it('[Cidade/UF], [data] vira coringa', () => {
     expect(fmt('assinam. [Cidade/UF], [data].')).toContain('{CIDADE_UNIDADE}, {DATA_ATUAL}');
+  });
+});
+
+describe('contrato Guarde Coisas (modelo CONTRATANTE/CONTRATADA)', () => {
+  it('numeração de cláusula com tab não vira tabela', () => {
+    const txt = [
+      'I.\tDAS PARTES',
+      '',
+      '3.1\tO valor devido pelo CONTRATANTE é de R$450,00 (Quatrocentos e cinquenta reais ), que deve ser pago.',
+      '3.2\tO pagamento poderá ser realizado através de boleto.',
+      '3.3\tApós o primeiro período, o valor poderá sofrer reajustes.',
+    ].join('\n');
+    const html = fmt(txt);
+    expect(html).not.toContain('<table');
+    expect(html).toContain('<strong>I.  DAS PARTES</strong>');
+  });
+
+  it('título romano em caixa mista fica em negrito', () => {
+    expect(fmt('XVII. Cláusula de Responsabilidade sobre Itens Armazenados:')).toContain(
+      '<strong>XVII. Cláusula de Responsabilidade sobre Itens Armazenados:</strong>',
+    );
+  });
+
+  it('valores reais viram coringa só no valor mensal, não em multas', () => {
+    const html = fmt(
+      '3.1 O valor devido pelo CONTRATANTE a CONTRATADA pelos primeiros 30 (Trinta) dias é de R$450,00 (Quatrocentos e cinquenta reais ), que deve ser pago.\n\n6.3 Será cobrado taxa de R$100,00 (cem reais) para a primeira hora.',
+    );
+    expect(html).toContain('{VALOR_TOTAL_CONTRATO} ({S_VALOR_TOTAL_CONTRATO})');
+    expect(html).toContain('R$100,00 (cem reais)');
+  });
+
+  it('número do contrato, box, plano, datas e CNPJ', () => {
+    const html = fmt(
+      [
+        'INSTRUMENTO PARTICULAR DE CONTRATO',
+        'Nº DO CONTRATO:00001',
+        '',
+        'inscrita no CNPJ: 99.999.999/9999-99 , por seus representantes legais.',
+        '',
+        '2.1 loca uma unidade CAIXA DE Nº 00001, 00005 , que ficará no depósito.',
+        '4.1 O prazo do presente contrato será Mensal , iniciando-se no dia 22/11/2024 com término em 22/12/2024 ocorrendo renovação.',
+      ].join('\n'),
+    );
+    expect(html).toContain('{NUMERO_CONTRATO}');
+    expect(html).toContain('{CNPJ_UNIDADE}');
+    expect(html).toContain('CAIXA DE Nº {BOXES_CONTRATO}');
+    expect(html).toContain('será {PLANO_CONTRATO}');
+    expect(html).toContain('no dia {DT_INICIO_CONTRATO}');
+    expect(html).toContain('término em {DT_FIM_CONTRATO}');
+  });
+
+  it('campos do CONTRATANTE com rótulo em caixa alta', () => {
+    const html = fmt('CONTRATANTE\nNOME / RAZÃO SOCIAL: JOAO DA SILVA\nCPF / CNPJ: 000.000.000-00\nEMAIL: ricardo@gmail.com');
+    expect(html).toContain('{NOME_CLIENTE}');
+    expect(html).toContain('{CPF_CNPJ_CLIENTE}');
+    expect(html).toContain('{EMAIL_CLIENTE}');
+  });
+
+  it('tabela de desconto por antecipação vira {TABELA_DESCONTO_ANTECIPACAO}', () => {
+    const html = fmt('DESCONTO POR ANTECIPAÇÃO\nDESCONTO\tDIAS ANTES DO VENCIMENTO\n3%\t5\n\nII. DO OBJETO');
+    expect(html).toContain('{TABELA_DESCONTO_ANTECIPACAO}');
+    expect(html).not.toContain('3%');
+    expect(html).not.toContain('<table');
+  });
+});
+
+describe('caixas (tabela de uma célula colada do Word)', () => {
+  const plain = [
+    'I. DAS PARTES',
+    '',
+    'CONTRATADA',
+    '',
+    'GUARDE COISAS, sociedade inscrita no CNPJ: 99.999.999/9999-99 , por seus representantes.',
+    '',
+    'CONTRATANTE',
+    'NOME / RAZÃO SOCIAL: JOAO DA SILVA',
+    'CPF / CNPJ: 000.000.000-00',
+    '',
+    'II. DO OBJETO',
+  ].join('\n');
+
+  const boxes = [
+    ['CONTRATADA', 'GUARDE COISAS, sociedade inscrita no CNPJ: 99.999.999/9999-99 , por seus representantes.'],
+    ['CONTRATANTE', 'NOME / RAZÃO SOCIAL: JOAO DA SILVA', 'CPF / CNPJ: 000.000.000-00'],
+  ];
+
+  it('sem marcação (sem tabela no HTML) nada vira caixa', () => {
+    expect(formatProspecto(plain, DEFAULT_RULES).html).not.toContain('<table');
+    expect(wrapBoxes(plain, [])).toBe(plain);
+  });
+
+  it('wrapBoxes marca só os trechos das caixas, ignorando espaços e linhas em branco', () => {
+    const out = wrapBoxes(plain, boxes);
+    expect((out.match(/\[\[CAIXA\]\]/g) ?? []).length).toBe(2);
+    expect((out.match(/\[\[\/CAIXA\]\]/g) ?? []).length).toBe(2);
+    expect(out.indexOf('II. DO OBJETO')).toBeGreaterThan(out.lastIndexOf('[[/CAIXA]]'));
+  });
+
+  it('caixa que não aparece no texto é ignorada', () => {
+    expect(wrapBoxes('só texto', [['outra coisa']])).toBe('só texto');
+  });
+
+  it('marcado: cada caixa vira tabela com borda, coringas valem e o resto fica fora', () => {
+    const html = formatProspecto(wrapBoxes(plain, boxes), DEFAULT_RULES).html;
+    expect((html.match(/<table/g) ?? []).length).toBe(2);
+    expect(html).toContain('{NOME_CLIENTE}');
+    expect(html).toContain('{CNPJ_UNIDADE}');
+    expect(html).not.toContain('[[CAIXA]]');
+    expect(html.indexOf('II. DO OBJETO')).toBeGreaterThan(html.lastIndexOf('</table>'));
+  });
+});
+
+describe('caixas: parágrafo quebrado em várias linhas no HTML', () => {
+  it('acha a caixa mesmo com quebra de linha diferente do texto puro', () => {
+    const plain = ['Antes', '', 'CONTRATADA', '', 'GUARDE COISAS, sociedade inscrita no CNPJ: 99 , por seus representantes legais.', '', 'Depois'].join('\n');
+    const box = ['CONTRATADA', 'GUARDE COISAS, sociedade inscrita', 'no CNPJ: 99 , por seus', 'representantes legais.'];
+    const out = wrapBoxes(plain, [box]);
+    expect(out).toContain('[[CAIXA]]\nCONTRATADA');
+    expect(out).toContain('legais.\n[[/CAIXA]]');
+    expect(out.indexOf('Antes')).toBeLessThan(out.indexOf('[[CAIXA]]'));
   });
 });
