@@ -1,7 +1,7 @@
 import './style.css';
 import { formatProspecto } from './formatter';
 import { loadRules, mergeNewDefaults, saveRules, resetRules, newRuleId, type RulesConfig, type CoringaRule } from './mappings';
-import { extractSingleCellBoxes, wrapBoxes } from './pasteBoxes';
+import { applyTables, extractTables } from './pasteBoxes';
 import { SIGNATURE_BLOCK_HTML, SIGNATURE_PLACEHOLDER, replaceSignatureBlock } from './signatureBlock';
 
 let rules: RulesConfig = loadRules();
@@ -106,11 +106,12 @@ function setupSection(config: SectionConfig): void {
     const html = e.clipboardData?.getData('text/html') ?? '';
     const plain = e.clipboardData?.getData('text/plain') ?? '';
     if (!html || !plain || !/<table/i.test(html)) return;
-    const boxes = extractSingleCellBoxes(html);
-    if (boxes.length === 0) return;
+    const tables = extractTables(html);
+    if (tables.length === 0) return;
+    const fixed = applyTables(plain, tables);
+    if (fixed === plain) return; // nada pra corrigir: deixa colar normal
     e.preventDefault();
-    const wrapped = wrapBoxes(plain, boxes);
-    config.input.setRangeText(wrapped, config.input.selectionStart, config.input.selectionEnd, 'end');
+    config.input.setRangeText(fixed, config.input.selectionStart, config.input.selectionEnd, 'end');
   });
 
   config.btnFormat.addEventListener('click', () => {

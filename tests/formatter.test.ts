@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatProspecto } from '../src/formatter';
 import { DEFAULT_RULES } from '../src/mappings';
-import { wrapBoxes } from '../src/pasteBoxes';
+import { applyTables, wrapBoxes } from '../src/pasteBoxes';
 import { replaceSignatureBlock, SIGNATURE_PLACEHOLDER } from '../src/signatureBlock';
 
 const fmt = (text: string) => formatProspecto(text, DEFAULT_RULES).html;
@@ -226,5 +226,90 @@ describe('caixas: parágrafo quebrado em várias linhas no HTML', () => {
     expect(out).toContain('[[CAIXA]]\nCONTRATADA');
     expect(out).toContain('legais.\n[[/CAIXA]]');
     expect(out.indexOf('Antes')).toBeLessThan(out.indexOf('[[CAIXA]]'));
+  });
+});
+
+describe('tabela com célula de várias linhas (Word quebra a linha da tabela)', () => {
+  const plain = [
+    'ENDEREÇO\t[Nome / Razão Social]\tCIDADE\tPalmas',
+    'BOX Nº\t[_____]\tÁREA APROX.\t[_____] m²',
+    'ACESSO\t2ªs. a 6ªs.',
+    'das 8:30 às 18:00hs.\tFECHAMENTO\tcadeado/chave do cliente',
+    'SEGURO OPCIONAL\t( ) SIM ( ) NÃO\tVALOR AUTODECLARADO',
+    '(para fins de seguro)\tR$ [_______]',
+    '',
+    'LOCADORA: ÚNICA SERVIÇOS STORAGE LTDA.',
+  ].join('\n');
+
+  const table = {
+    kind: 'grid' as const,
+    rows: [
+      ['ENDEREÇO', '[Nome / Razão Social]', 'CIDADE', 'Palmas'],
+      ['BOX Nº', '[_____]', 'ÁREA APROX.', '[_____] m²'],
+      ['ACESSO', '2ªs. a 6ªs. das 8:30 às 18:00hs.', 'FECHAMENTO', 'cadeado/chave do cliente'],
+      ['SEGURO OPCIONAL', '( ) SIM ( ) NÃO', 'VALOR AUTODECLARADO (para fins de seguro)', 'R$ [_______]'],
+    ],
+  };
+
+  it('reconstrói as linhas da tabela, com a célula de várias linhas inteira', () => {
+    const fixed = applyTables(plain, [table]);
+    expect(fixed).toContain('ACESSO\t2ªs. a 6ªs. das 8:30 às 18:00hs.\tFECHAMENTO\tcadeado/chave do cliente');
+    expect(fixed).toContain('VALOR AUTODECLARADO (para fins de seguro)\tR$ [_______]');
+    expect(fixed).toContain('LOCADORA: ÚNICA SERVIÇOS STORAGE LTDA.');
+  });
+
+  it('na tabela formatada não sobra linha quebrada', () => {
+    const html = formatProspecto(applyTables(plain, [table]), DEFAULT_RULES).html;
+    expect(html).not.toContain('<td><strong>das 8:30');
+    expect(html).not.toContain('<td><strong>(para fins de seguro)');
+    expect((html.match(/<table/g) ?? []).length).toBe(1);
+    const acesso = html.match(/<tr>(?:(?!<\/tr>).)*ACESSO.*?<\/tr>/)![0];
+    expect(acesso).toContain('das 8:30 às 18:00hs.');
+    expect(acesso).toContain('FECHAMENTO');
+  });
+});
+
+describe('assinatura padrão não pode comer as cláusulas', () => {
+  const contrato = [
+    'CONTRATO DE LOCAÇÃO',
+    'LOCATÁRIO\tNome\tCPF/CNPJ\t[__]',
+    'LOCADORA: ÚNICA SERVIÇOS STORAGE LTDA., inscrita no CNPJ nº 61.504.744/0001-38, com sede em Palmas, TO.',
+    'As partes celebram este contrato.',
+    '1. DO OBJETO',
+    '1.1. A ÚNICA aluga ao cliente um box.',
+    '6. RESPONSABILIDADES E SEGURO',
+    '6.1. O LOCATÁRIO é responsável por embalar.',
+    '',
+    'Palmas, 10 de novembro.',
+    '',
+    '______________________',
+    'LOCATÁRIO(A)',
+    '______________________',
+    'LOCADORA - ÚNICA SERVIÇOS',
+    'TESTEMUNHA 1',
+    'Nome:',
+    'CPF:',
+    '',
+    'ANEXO I - DECLARAÇÃO',
+    'Eu, declaro.',
+  ].join('\n');
+
+  it('mantém cláusulas e a linha longa "LOCADORA: ..." e troca só a assinatura final', () => {
+    const out = replaceSignatureBlock(contrato)!;
+    expect(out).toContain('LOCADORA: ÚNICA SERVIÇOS STORAGE LTDA., inscrita');
+    expect(out).toContain('1.1. A ÚNICA aluga ao cliente um box.');
+    expect(out).toContain('6.1. O LOCATÁRIO é responsável por embalar.');
+    expect(out).toContain('Palmas, 10 de novembro.');
+    expect(out).toContain('ANEXO I - DECLARAÇÃO');
+    expect(out).toContain(SIGNATURE_PLACEHOLDER);
+    expect(out).not.toContain('TESTEMUNHA 1');
+    expect(out).not.toContain('LOCADORA - ÚNICA SERVIÇOS');
+    expect(out.indexOf(SIGNATURE_PLACEHOLDER)).toBeGreaterThan(out.indexOf('Palmas, 10 de novembro.'));
+    expect(out.indexOf(SIGNATURE_PLACEHOLDER)).toBeLessThan(out.indexOf('ANEXO I'));
+  });
+
+  it('só a linha longa "LOCADORA: ..." (sem assinatura): não corta nada', () => {
+    const txt = ['LOCADORA: ÚNICA SERVIÇOS STORAGE LTDA., inscrita no CNPJ nº 61.504.744/0001-38, com sede em Palmas, TO.', '1. DO OBJETO', '1.1. Texto.'].join('\n');
+    expect(replaceSignatureBlock(txt)).toBeNull();
   });
 });
